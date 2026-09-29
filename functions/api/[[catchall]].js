@@ -87,6 +87,13 @@ function resolveApiKey(reqBody, env) {
   if (clientKey) return clientKey;
 
   if (env && typeof env === 'object') {
+    for (const key of Object.keys(env)) {
+      const upper = key.toUpperCase();
+      if (upper === 'GEMINI_API_KEY' || upper === 'GOOGLE_API_KEY' || upper === 'GEMINI_KEY') {
+        const val = env[key];
+        if (typeof val === 'string' && val.trim()) return val.trim();
+      }
+    }
     const directKey = env.GEMINI_API_KEY || env.GOOGLE_API_KEY || env.GEMINI_KEY;
     if (directKey && typeof directKey === 'string' && directKey.trim()) {
       return directKey.trim();
@@ -240,16 +247,20 @@ export async function handleApiRequest(request, env) {
         version: '2.5.0',
         hasApiKey: hasKey,
         defaultModel: DEFAULT_MODEL,
-        activeRoomsCount: activeRooms.size
+        activeRoomsCount: activeRooms.size,
+        envKeys: env ? Object.keys(env) : []
       }), { headers: corsHeaders });
     }
 
     // 2. POST /api/test-key
     if (pathname === '/test-key' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      const keyToTest = body.apiKey || resolveApiKey(body, env);
+      const keyToTest = (body.apiKey && body.apiKey.trim()) || resolveApiKey(body, env);
       if (!keyToTest) {
-        return new Response(JSON.stringify({ ok: false, error: '請提供要測試的 Gemini API Key' }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ 
+          ok: false, 
+          error: '伺服器未偵測到內建金鑰，且未輸入個人金鑰。請在上方欄位填寫 Gemini API Key 後再點擊測試。' 
+        }), { headers: corsHeaders });
       }
 
       const testResult = await callGeminiApi({
@@ -260,7 +271,8 @@ export async function handleApiRequest(request, env) {
 
       return new Response(JSON.stringify({
         ok: true,
-        message: '連線正常！Gemini 運作無誤',
+        message: (body.apiKey && body.apiKey.trim()) ? '個人自備金鑰連線成功！' : '伺服器全局金鑰連線成功！',
+        model: body.model || DEFAULT_MODEL,
         reply: testResult
       }), { headers: corsHeaders });
     }

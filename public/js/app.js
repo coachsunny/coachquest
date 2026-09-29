@@ -1403,6 +1403,7 @@ function handleSaveSettings() {
 
 async function handleTestApiKey() {
   const testKey = elements.inputApiKey?.value.trim();
+  const selectedModel = elements.selectModel?.value || getSavedModel();
   const resultEl = elements.apiTestResult;
   if (!resultEl) return;
 
@@ -1413,11 +1414,11 @@ async function handleTestApiKey() {
     const res = await fetch('/api/test-key', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey: testKey })
+      body: JSON.stringify({ apiKey: testKey, model: selectedModel })
     });
     const data = await res.json();
     if (data.ok) {
-      resultEl.textContent = `✅ 連線成功！${data.message || 'Gemini 支援正常'}`;
+      resultEl.textContent = `✅ 連線成功！${data.message || 'Gemini 運作無誤'}`;
       resultEl.style.color = '#10b981';
       if (elements.apiStatusDot) {
         elements.apiStatusDot.className = 'status-dot dot-ok';
@@ -1453,7 +1454,11 @@ function getSavedApiKey() {
 }
 
 function getSavedModel() {
-  return localStorage.getItem('coachquest_custom_model') || 'gemini-2.5-flash';
+  const saved = localStorage.getItem('coachquest_custom_model');
+  if (!saved || saved.includes('2.5')) {
+    return 'gemini-3.5-flash-lite';
+  }
+  return saved;
 }
 
 function showSystemToast(msg) {
