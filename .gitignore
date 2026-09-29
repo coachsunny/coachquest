@@ -1,0 +1,18 @@
+# Cloudflare local variables & secrets (MUST NOT COMMIT)
+.dev.vars
+.dev.vars.local
+
+# Node modules & dependencies
+node_modules/
+package-lock.json
+
+# Wrangler build artifacts & logs
+.wrangler/
+dist/
+build/
+.cache/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+*.log

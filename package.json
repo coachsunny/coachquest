@@ -1,0 +1,22 @@
+{
+  "name": "coachquest",
+  "version": "2.0.0",
+  "description": "CoachQuest - 寶可夢風格溝通對決與百寶箱道館",
+  "main": "worker.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler pages dev public"
+  },
+  "keywords": [
+    "coach",
+    "gamification",
+    "pokemon",
+    "cloudflare-workers",
+    "gemini"
+  ],
+  "devDependencies": {
+    "wrangler": "^3.78.0"
+  }
+}

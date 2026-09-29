@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CoachQuest 教練大冒險 - 實戰溝通道館遊戲</title>
+  <link rel="stylesheet" href="css/quest-theme.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ================= 頂部導航列 (Navbar & Player HUD) ================= -->
+  <header class="navbar">
+    <div class="nav-left">
+      <div class="brand">
+        <span class="brand-icon">🎮</span>
+        <span class="brand-title">CoachQuest</span>
+        <span class="brand-badge">寶可夢對決版</span>
+      </div>
+      
+      <!-- 玩家狀態 HUD -->
+      <div class="player-hud" id="playerHud" title="點擊設定個人資料">
+        <span id="hudPlayerName">🧙‍♂️ 教練學徒</span>
+        <span class="hud-level" id="hudLevel">Lv.1</span>
+        <span class="player-title-tag" id="hudTitle">見習溝通使</span>
+        <span class="hud-captures" id="hudCaptures">🔴 <b>0</b> / 16</span>
+      </div>
+    </div>
+
+    <div class="nav-right">
+      <button class="nav-btn nav-btn-highlight" id="btnNavMultiplayer" title="多人連線約戰大廳">
+        <span>⚔️</span>
+        <span class="nav-text">多人約戰</span>
+      </button>
+
+      <button class="nav-btn" id="btnNavPokedex" title="百寶箱圖鑑儀表板">
+        <span>🎒</span>
+        <span class="nav-text">百寶箱</span>
+      </button>
+
+      <button class="nav-btn" id="btnNavLeaderboard" title="冒險者排行榜">
+        <span>🏆</span>
+        <span class="nav-text">前10排行</span>
+      </button>
+
+      <button class="nav-btn" id="btnNavSettings" title="系統與 API 設定">
+        <span>⚙️</span>
+        <span class="nav-text">設定</span>
+        <span class="status-dot dot-warn" id="apiStatusDot" title="API 連線狀態"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= 主內容容器 ================= -->
+  <main class="main-content">
+
+    <!-- ================= 視圖 1: 道館冒險地圖 (View 1: Quest Map) ================= -->
+    <section class="view-panel active" id="viewMap">
+      <div class="quest-map-container">
+        
+        <!-- 英雄橫幅 -->
+        <div class="map-hero">
+          <div class="map-hero-text">
+            <h1><span>🛡️</span> 溝通冒險道館</h1>
+            <p>挑戰四大人生溝通情境！運用同理心、提問引導與心理學心法化解關主防備，結算成績達 <b>70分</b> 即可將關主收攏至專屬百寶箱！亦可點擊上方「⚔️ 多人約戰」與夥伴連線同樂！</p>
+          </div>
+          <div class="map-hero-badge">
+            <div class="badge-val" id="mapHeroCaptured">0 / 16</div>
+            <div class="badge-lbl">總收攏進度 (<span id="mapHeroRate">0%</span>)</div>
+          </div>
+        </div>
+
+        <!-- 四大場景導航標籤 (職場 / 親子 / 夫妻 / 朋友) -->
+        <div class="category-tabs" id="categoryTabs">
+          <!-- 由 bosses.js 動態渲染 -->
+        </div>
+
+        <!-- 場景標題與描述 -->
+        <div class="section-header">
+          <h2 id="mapTitle">💼 職場篇 · 道館關卡</h2>
+          <span class="section-desc" id="mapSubtitle">上下級溝通、跨部門協作、向上管理與考核衝突</span>
+        </div>
+
+        <!-- 關主卡片列表網格 -->
+        <div class="boss-grid" id="bossGrid">
+          <!-- 由 app.js 動態渲染 4 位關主卡片 -->
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= 視圖 2: 對戰道館 (View 2: Battle Arena) ================= -->
+    <section class="view-panel" id="viewBattle">
+      <div class="battle-container">
+        
+        <!-- 對決頂部資訊列 -->
+        <div class="battle-header">
+          <div class="battle-header-top">
+            <div class="battle-boss-info">
+              <div class="battle-boss-avatar" id="battleBossAvatar">👨‍💻</div>
+              <div>
+                <div class="battle-boss-title-row">
+                  <span class="battle-boss-name" id="battleBossName">研發小陳</span>
+                  <span class="battle-boss-role" id="battleBossTitle">頻繁加班心力交瘁的資深工程師</span>
+                  <span class="battle-boss-badge" id="battleBossCategory">💼 職場篇</span>
+                </div>
+                <div class="battle-scenario-brief" id="battleScenarioBrief">場景簡介載入中...</div>
+              </div>
+            </div>
+
+            <div class="battle-header-actions">
+              <button class="btn btn-outline btn-sm" id="btnRetreat" title="返回地圖">
+                🏃 暫退
+              </button>
+            </div>
+          </div>
+
+          <!-- 關主心防與對抗進度條 -->
+          <div class="battle-header-controls">
+            <div class="battle-boss-weakness">
+              <span class="weakness-pill" id="battleWeaknessPill">心防弱點：非暴力溝通 (NVC)</span>
+            </div>
+
+            <div class="battle-hp-wrap">
+              <div class="hp-label-row">
+                <span class="hp-title">🛡️ 關主心防</span>
+                <span class="hp-val" id="battleHpText">100%</span>
+              </div>
+              <div class="bar-track hp-track">
+                <div class="bar-fill hp-fill" id="battleHpFill" style="width: 100%;"></div>
+              </div>
+            </div>
+
+            <div class="battle-turn-counter">
+              <span class="turn-pill" id="battleTurnBadge">第 1 / 8 回合</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 多人模式即時外掛面板 -->
+        <!-- 1. 模式 A: 對手即時血條進度條 -->
+        <div class="opponent-live-banner hidden" id="opponentLiveBanner">
+          <div class="opponent-info-inline">
+            <span id="oppAvatar">🧝‍♀️</span>
+            <span>對手：<b id="oppName">挑戰者</b></span>
+            <span class="turn-pill" id="oppTurnBadge">第 1 回合</span>
+          </div>
+          <div class="opponent-progress-bar">
+            <span>對手心防：<b id="oppHpText">100%</b></span>
+            <div class="opp-hp-track">
+              <div class="opp-hp-fill" id="oppHpFill" style="width: 100%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 模式 B: 真人關主秘密指南卡片 -->
+        <div class="client-secret-box hidden" id="clientSecretBox">
+          <div class="client-secret-header">
+            <span>🎭 你的關主角色秘密指南（只有你看得到，教練看不到）</span>
+            <button class="tool-btn" id="btnToggleSecret" style="padding:2px 8px;font-size:0.75rem;">收合</button>
+          </div>
+          <div class="client-secret-body" id="clientSecretContent">
+            <div class="secret-item"><b>🎯 內在深層渴望：</b><span id="secretMotiveText">載入中...</span></div>
+            <div class="secret-item"><b>🍃 態度軟化指標：</b><span id="secretSoftenText">載入中...</span></div>
+            <div class="secret-item"><b>💎 破防降服契機：</b><span id="secretSurrenderText">載入中...</span></div>
+          </div>
+        </div>
+
+        <!-- 3. 模式 C: 雙打協同輪替標籤 -->
+        <div class="hidden" id="coopTurnWrap" style="text-align: center; margin-bottom: 0.35rem;">
+          <span class="coop-turn-pill" id="coopTurnPill">👉 目前輪到 [大華] 提問！</span>
+        </div>
+
+        <!-- 對話滾動視窗 -->
+        <div class="battle-chat-viewport" id="chatViewport">
+          <div class="chat-messages" id="chatMessages">
+            <!-- 動態渲染對話泡泡與心聲 -->
+          </div>
+
+          <!-- 輸入中狀態動畫 -->
+          <div class="typing-indicator" id="typingIndicator" style="display: none;">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <span class="typing-text">關主正在思索內心回應...</span>
+          </div>
+        </div>
+
+        <!-- 底部互動與輸入面板 -->
+        <div class="battle-input-panel">
+          <div class="battle-input-toolbar">
+            <div class="toolbar-left">
+              <button class="tool-btn hint-btn" id="btnHint" title="獲取即時教練錦囊提問靈感">
+                💡 戰術錦囊
+              </button>
+              <label class="toggle-label" title="切換顯示關主的潛意識內心真實想法">
+                <input type="checkbox" id="toggleThought" checked>
+                <span>💭 關主心聲</span>
+              </label>
+            </div>
+
+            <div class="toolbar-right">
+              <button class="btn btn-gold btn-sm" id="btnCapture" title="拋出教練精靈球結算對決並收攏至百寶箱">
+                ⚔️ 申請結算收攏
+              </button>
+            </div>
+          </div>
+
+          <form class="battle-input-form" onsubmit="return false;">
+            <textarea 
+              id="messageInput" 
+              placeholder="輸入你的教練引導或同理回應...（Enter 發送，Shift + Enter 換行）" 
+              rows="1"
+            ></textarea>
+            <button class="btn btn-primary btn-send" id="btnSend">
+              發送 💬
+            </button>
+          </form>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= 視圖 3: 寶可夢收攏結算 (View 3: Evaluation & Capture) ================= -->
+    <section class="view-panel" id="viewEvaluation">
+      <div class="eval-container">
+        
+        <!-- 結算勝利/破防英雄卡片 -->
+        <div class="victory-hero-card captured" id="evalHeroCard">
+          <div class="score-badge-circle" id="evalScoreBadge">85分</div>
+          <h2 class="victory-title" id="evalTitle">🎉 成功收攏！【研發小陳】已收攏入百寶箱！</h2>
+          <p class="victory-subtitle" id="evalSubtitle">太棒了！你的傾聽與同理打動了關主，解鎖專屬心得卡片！</p>
+          <div class="eval-exp-pill" id="evalExpGain">🌟 獲得 +850 EXP</div>
+        </div>
+
+        <!-- 絕妙教練金句 -->
+        <div class="eval-card eval-quote-box" id="evalQuoteBox">
+          <div class="quote-header">✨ 本次最精彩的教練金句：</div>
+          <div class="quote-text">「聽得出來你不是不想扛責任，而是需要一個明確的界線與被尊重的空間。」</div>
+        </div>
+
+        <!-- 攻心關鍵復盤 -->
+        <div class="eval-card">
+          <div id="evalWinningReason">
+            <b>🎯 攻心關鍵復盤：</b>成功識別了關主的真實需求，引導出自我反思與下一步行動。
+          </div>
+        </div>
+
+        <!-- 五大專業溝通維度評分條 -->
+        <div class="eval-card">
+          <h3 class="card-section-title">📊 教練能力五維度分析</h3>
+          <div class="dimension-grid" id="evalDimensionsGrid">
+            <!-- 動態渲染五大維度進度條 -->
+          </div>
+        </div>
+
+        <!-- 專業建議 -->
+        <div class="eval-card">
+          <h3 class="card-section-title">💡 專家指導建議</h3>
+          <p class="advice-content" id="evalAdviceText">
+            持續在對話中維持中立與好奇心，善用強有力的開放式提問促發更多洞察。
+          </p>
+        </div>
+
+        <!-- 結算操作按鈕列 -->
+        <div class="eval-actions">
+          <button class="btn btn-gold" id="btnEvalSubmitBoard">
+            🏆 登錄冒險者前 10 排行榜
+          </button>
+          <button class="btn btn-outline" id="btnEvalRetry">
+            🔄 再次切磋
+          </button>
+          <button class="btn btn-primary" id="btnEvalContinue">
+            🗺️ 返回道館地圖
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================= 彈窗 1: 百寶箱圖鑑儀表板 (Inventory Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalInventory">
+    <div class="modal-dialog modal-large">
+      <div class="modal-header">
+        <h3>🎒 我的百寶箱圖鑑 (Treasure Pokédex)</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="inv-summary-banner">
+          <div class="inv-stat-item">
+            <div class="inv-stat-val" id="invTotalCaptured">0 / 16</div>
+            <div class="inv-stat-lbl">已收攏關主</div>
+          </div>
+          <div class="inv-stat-item">
+            <div class="inv-stat-val" id="invCompletionRate">0%</div>
+            <div class="inv-stat-lbl">圖鑑收集率</div>
+          </div>
+          <div class="inv-stat-item">
+            <div class="inv-stat-val" id="invAvgScore">0分</div>
+            <div class="inv-stat-lbl">平均通關成績</div>
+          </div>
+        </div>
+
+        <div class="pokedex-tabs" id="pokedexTabs">
+          <!-- 動態渲染分類切換按鈕 -->
+        </div>
+
+        <div class="pokedex-grid" id="pokedexGrid">
+          <!-- 動態渲染收攏狀態 -->
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-sm" data-close-modal>關閉圖鑑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 2: 關主心得卡 (Boss Card Detail Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalBossDetail">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>📜 關主教練心得卡</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body" id="bossDetailContent">
+        <!-- 動態渲染心得卡詳細內容 -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" data-close-modal>確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 3: 前 10 名排行榜 (Leaderboard Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalLeaderboard">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>🏆 溝通冒險者前 10 名排行榜</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="leaderboard-desc">即時統計全體學員收攏之關主數量與最高得分排行：</p>
+        <div class="leaderboard-table" id="leaderboardContent">
+          <!-- 動態渲染前 10 名 -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" data-close-modal>關閉排行榜</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 4: 多人約戰大廳 (Multiplayer Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalMultiplayer">
+    <div class="modal-dialog modal-large">
+      <div class="modal-header">
+        <h3>⚔️ 多人連線約戰大廳 (Multiplayer Arena)</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- 頁籤切換：建立房間 / 輸入房號 -->
+        <div class="pokedex-tabs" style="margin-bottom: 1.25rem;">
+          <button class="tool-btn pokedex-tab-btn active" id="tabMpCreate">➕ 建立對戰房間</button>
+          <button class="tool-btn pokedex-tab-btn" id="tabMpJoin">🔑 輸入房號加入</button>
+        </div>
+
+        <!-- 區塊 A: 建立房間面板 -->
+        <div id="panelMpCreate">
+          <div class="form-group">
+            <label><b>第一步：選擇對戰模式</b></label>
+            <div class="multiplayer-mode-grid">
+              
+              <!-- 模式 A -->
+              <div class="mode-select-card active" data-mode="pvp_speedrun">
+                <div>
+                  <span class="mode-badge badge-mode-a">🏃 模式 A</span>
+                  <div class="mode-card-title">雙人破心競速賽</div>
+                  <div class="mode-card-desc">兩位教練各自面對同一位關主，即時同步對手血條！最先破除心防並達 70 分收攏者獲勝！</div>
+                </div>
+              </div>
+
+              <!-- 模式 B -->
+              <div class="mode-select-card" data-mode="human_roleplay">
+                <div>
+                  <span class="mode-badge badge-mode-b">🎭 模式 B</span>
+                  <div class="mode-card-title">真人扮演 + AI考官</div>
+                  <div class="mode-card-desc">學員 A 扮教練，學員 B 扮關主（獲專屬秘密指南）。雙方真實交鋒，AI 在旁深度評審！</div>
+                </div>
+              </div>
+
+              <!-- 模式 C -->
+              <div class="mode-select-card" data-mode="coop_tagteam">
+                <div>
+                  <span class="mode-badge badge-mode-c">🛡️ 模式 C</span>
+                  <div class="mode-card-title">雙人雙打協同戰</div>
+                  <div class="mode-card-desc">兩位教練組隊聯手，一人一回合輪流接力提問，共同擊潰超高階魔王心防！</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 1.25rem;">
+            <label for="selectMpBoss"><b>第二步：挑選挑戰的關主</b></label>
+            <select id="selectMpBoss" class="settings-form">
+              <!-- 由 JS 動態填入 16 位關主選單 -->
+            </select>
+          </div>
+
+          <button class="btn btn-primary" id="btnCreateRoomSubmit" style="width: 100%; padding: 0.85rem; font-size: 1rem;">
+            ⚔️ 立即建立房間（生成 4 位數房號）
+          </button>
+        </div>
+
+        <!-- 區塊 B: 加入房間面板 -->
+        <div id="panelMpJoin" class="hidden">
+          <div style="background: #f8fafc; border-radius: var(--radius-md); padding: 1.5rem; text-align: center; border: 1px solid var(--border-color);">
+            <h4 style="margin-bottom: 0.5rem; font-size: 1.1rem;">輸入好友分享的 4 位數房號</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.25rem;">即時連線進入對戰室，準備開打！</p>
+            <div style="display: flex; gap: 0.5rem; max-width: 320px; margin: 0 auto;">
+              <input type="text" id="inputJoinRoomCode" placeholder="如：8826" maxlength="4" style="font-size: 1.5rem; text-align: center; letter-spacing: 0.2em; font-weight: 800; text-transform: uppercase;">
+              <button class="btn btn-primary" id="btnJoinRoomSubmit" style="white-space: nowrap;">
+                🚀 加入對戰
+              </button>
+            </div>
+            <div id="joinErrorMsg" style="color: #ef4444; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+          </div>
+        </div>
+
+        <!-- 區塊 C: 等待室 / 準備室 (Waiting Room) -->
+        <div id="panelMpWaiting" class="hidden">
+          <div class="room-code-hero">
+            <div class="room-code-label">房間已建立！請將房號發給對手加入：</div>
+            <div class="room-code-number" id="waitingRoomCode">----</div>
+            <div class="room-code-hint">模式：<span id="waitingModeName">雙人破心競速</span> | 關主：<span id="waitingBossName">研發小陳</span></div>
+          </div>
+
+          <div class="waiting-room-players">
+            <div class="waiting-player-box">
+              <div class="waiting-player-avatar" id="p1WaitAvatar">🧙‍♂️</div>
+              <div class="waiting-player-name" id="p1WaitName">房主 (你)</div>
+              <span class="waiting-player-tag">房主 · 已準備</span>
+            </div>
+
+            <div class="waiting-vs-divider">VS</div>
+
+            <div class="waiting-player-box">
+              <div class="waiting-player-avatar" id="p2WaitAvatar" style="opacity: 0.5;">❓</div>
+              <div class="waiting-player-name" id="p2WaitName">等候對手加入...</div>
+              <span class="waiting-player-tag" id="p2WaitTag">等待中</span>
+            </div>
+          </div>
+
+          <div style="text-align: center; margin-top: 1rem;">
+            <button class="btn btn-gold btn-large" id="btnStartMultiplayerMatch" disabled style="padding: 0.85rem 2rem; font-size: 1.1rem; width: 100%;">
+              ⏳ 等待對手加入房間中...
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-sm" id="btnLeaveMpRoom" data-close-modal>關閉大廳</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 5: 系統與 API 設定 (Settings Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalSettings">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>⚙️ 冒險者與 API 設定</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <form class="settings-form" onsubmit="return false;">
+          <div class="form-group">
+            <label for="inputNickname">冒險者暱稱</label>
+            <input type="text" id="inputNickname" placeholder="例如：見習教練小明" maxlength="16">
+          </div>
+
+          <div class="form-group">
+            <label for="selectAvatar">冒險者頭像</label>
+            <select id="selectAvatar">
+              <option value="🧙‍♂️">🧙‍♂️ 溝通魔法師</option>
+              <option value="🧝‍♀️">🧝‍♀️ 心靈精靈</option>
+              <option value="🧑‍💼">🧑‍💼 專業職場教練</option>
+              <option value="🦸‍♂️">🦸‍♂️ 破冰超人</option>
+              <option value="🌸">🌸 溫柔傾聽者</option>
+              <option value="🦊">🦊 敏銳洞察狐</option>
+              <option value="🦁">🦁 勇氣領航獅</option>
+            </select>
+          </div>
+
+          <div class="form-divider"></div>
+
+          <div class="form-group">
+            <label for="inputApiKey">
+              Gemini API Key（選填，若伺服器已有內建金鑰可留空）
+            </label>
+            <input type="password" id="inputApiKey" placeholder="AIzaSy...">
+            <small class="form-help">已支援伺服器端全局金鑰託管，此處僅供個人自備金鑰覆蓋使用。</small>
+          </div>
+
+          <div class="form-group">
+            <label for="selectModel">AI 模型選擇</label>
+            <select id="selectModel">
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash（推薦，極速流暢）</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro（深度推論，需較佳配額）</option>
+            </select>
+          </div>
+
+          <div class="form-actions-inline">
+            <button class="btn btn-outline btn-sm" id="btnTestApi">
+              🔄 測試 API 連線
+            </button>
+            <span id="apiTestResult" class="test-result-inline"></span>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline btn-sm" data-close-modal>取消</button>
+        <button class="btn btn-primary btn-sm" id="btnSaveSettings">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入主模組 -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
