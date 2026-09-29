@@ -1766,3 +1766,25 @@ body {
   100% { transform: scale(1); }
 }
 
+/* 語言切換按鈕 */
+#btnToggleLang {
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+  transition: all 0.2s ease;
+}
+#btnToggleLang:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+/* 首次起程註冊與存檔卡片樣式 */
+.save-guarantee-card {
+  animation: fadeIn 0.4s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+

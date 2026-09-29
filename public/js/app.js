@@ -7,6 +7,7 @@ import { CATEGORIES, BOSSES, getBossById, getBossesByCategory } from './bosses.j
 import { InventoryManager } from './inventory.js';
 import { LeaderboardManager } from './leaderboard.js';
 import { MultiplayerManager } from './multiplayer.js';
+import { LangManager } from './lang.js';
 
 // 全域遊戲狀態
 const state = {
@@ -151,7 +152,20 @@ function initElements() {
     selectAvatar: document.getElementById('selectAvatar'),
     btnTestApi: document.getElementById('btnTestApi'),
     btnSaveSettings: document.getElementById('btnSaveSettings'),
-    apiTestResult: document.getElementById('apiTestResult')
+    apiTestResult: document.getElementById('apiTestResult'),
+
+    // Lang, Onboarding & Backup
+    btnToggleLang: document.getElementById('btnToggleLang'),
+    langBtnText: document.getElementById('langBtnText'),
+    modalOnboarding: document.getElementById('modalOnboarding'),
+    inputOnboardNickname: document.getElementById('inputOnboardNickname'),
+    selectOnboardAvatar: document.getElementById('selectOnboardAvatar'),
+    btnFinishOnboarding: document.getElementById('btnFinishOnboarding'),
+    btnExportSave: document.getElementById('btnExportSave'),
+    btnPokedexExport: document.getElementById('btnPokedexExport'),
+    btnImportSave: document.getElementById('btnImportSave'),
+    inputImportFile: document.getElementById('inputImportFile'),
+    importResultMsg: document.getElementById('importResultMsg')
   };
 }
 
@@ -163,10 +177,26 @@ export function initApp() {
   try {
     initElements();
     bindEvents();
+
+    // 語言偏好初始化 (繁/簡體)
+    const currentLang = LangManager.getLang();
+    if (elements.langBtnText) {
+      elements.langBtnText.textContent = currentLang === 'zh-CN' ? '繁體' : '簡體';
+    }
+    if (currentLang === 'zh-CN') {
+      LangManager.translateDOM(document.body);
+    }
+
     refreshPlayerHud();
     renderCategoryTabs();
     renderBossGrid();
     checkApiStatus();
+
+    // 首次進入時啟動起程註冊設定
+    if (!InventoryManager.isOnboarded()) {
+      openOnboardingModal();
+    }
+
     console.log('✅ CoachQuest 遊戲核心載入完成！四大道館與多人約戰準備就緒。');
   } catch (err) {
     console.error('❌ CoachQuest 初始化異常:', err);
@@ -246,6 +276,25 @@ function bindEvents() {
   // 設定儲存
   elements.btnSaveSettings?.addEventListener('click', () => handleSaveSettings());
   elements.btnTestApi?.addEventListener('click', () => handleTestApiKey());
+
+  // 語言繁簡轉換 (OpenCC)
+  elements.btnToggleLang?.addEventListener('click', () => handleToggleLanguage());
+
+  // 首次起程註冊
+  elements.btnFinishOnboarding?.addEventListener('click', () => handleFinishOnboarding());
+  elements.inputOnboardNickname?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleFinishOnboarding();
+  });
+
+  // 存檔匯出與還原
+  elements.btnExportSave?.addEventListener('click', () => handleExportBackup());
+  elements.btnPokedexExport?.addEventListener('click', () => handleExportBackup());
+  elements.btnImportSave?.addEventListener('click', () => elements.inputImportFile?.click());
+  elements.inputImportFile?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) handleImportBackupFile(file);
+    e.target.value = '';
+  });
 
   // 多人連線事件
   bindMultiplayerEvents();
@@ -637,7 +686,7 @@ function refreshPlayerHud() {
 
   if (elements.hudPlayerName) elements.hudPlayerName.textContent = `${data.avatar} ${data.nickname}`;
   if (elements.hudLevel) elements.hudLevel.textContent = `Lv.${rank.level}`;
-  if (elements.hudTitle) elements.hudTitle.textContent = `${rank.badge} ${rank.title}`;
+  if (elements.hudTitle) elements.hudTitle.textContent = `${rank.badge} ${LangManager.t(rank.title)}`;
   if (elements.hudCaptures) elements.hudCaptures.innerHTML = `🔴 <b>${stats.totalCaptured}</b> / ${stats.totalAvailable}`;
   
   if (elements.hudExpFill) elements.hudExpFill.style.width = `${rank.progressPercent}%`;
@@ -645,6 +694,10 @@ function refreshPlayerHud() {
 
   if (elements.mapHeroCaptured) elements.mapHeroCaptured.textContent = `${stats.totalCaptured} / ${stats.totalAvailable}`;
   if (elements.mapHeroRate) elements.mapHeroRate.textContent = `${stats.completionRate}%`;
+
+  if (LangManager.getLang() === 'zh-CN' && elements.playerHud) {
+    LangManager.translateDOM(elements.playerHud);
+  }
 }
 
 // ========================================================
@@ -666,6 +719,10 @@ function renderCategoryTabs() {
       </button>
     `;
   }).join('');
+
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(elements.categoryTabs);
+  }
 
   elements.categoryTabs.querySelectorAll('.category-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -742,6 +799,12 @@ function renderBossGrid() {
       </div>
     `;
   }).join('');
+
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(elements.bossGrid);
+    if (elements.mapTitle) LangManager.translateDOM(elements.mapTitle);
+    if (elements.mapSubtitle) LangManager.translateDOM(elements.mapSubtitle);
+  }
 
   elements.bossGrid.querySelectorAll('.btn-challenge').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -876,10 +939,13 @@ async function handleSendMessage() {
       throw new Error(data.error || '後端伺服器回應異常');
     }
 
+    const replyText = LangManager.t(data.reply || '……');
+    const thoughtText = LangManager.t(data.innerThought || '');
+
     const bossMsg = {
       role: 'assistant',
-      content: data.reply || '……',
-      innerThought: data.innerThought || ''
+      content: replyText,
+      innerThought: thoughtText
     };
     state.dialogueHistory.push(bossMsg);
     appendMessageToChat(bossMsg);
@@ -899,12 +965,12 @@ async function handleSendMessage() {
     }
 
     if (state.turnCount > state.maxTurns) {
-      showSystemToast('已達最大回合數！關主心防已大幅鬆動，現在是收攏的最佳時機！');
+      showSystemToast(LangManager.t('已達最大回合數！關主心防已大幅鬆動，現在是收攏的最佳時機！'));
     }
 
   } catch (err) {
     console.error('對戰通訊失敗:', err);
-    appendSystemNotice(`⚠️ 通訊異常: ${err.message}。若為 API 金鑰問題，可點擊右上角「⚙️ 設定」檢查。`);
+    appendSystemNotice(LangManager.t(`⚠️ 通訊異常: ${err.message}。若為 API 金鑰問題，可點擊右上角「⚙️ 設定」檢查。`));
   } finally {
     state.isWaitingResponse = false;
     setTypingIndicator(false);
@@ -916,7 +982,7 @@ async function handleRequestHint() {
   if (!state.selectedBoss || state.isWaitingResponse) return;
 
   elements.btnHint.disabled = true;
-  elements.btnHint.textContent = '💡 思考中...';
+  elements.btnHint.textContent = LangManager.t('💡 思考中...');
 
   try {
     const userApiKey = getSavedApiKey();
@@ -937,15 +1003,15 @@ async function handleRequestHint() {
     const fwName = (state.selectedBoss.framework && state.selectedBoss.framework.name) || state.selectedBoss.weaknessName || '非暴力溝通';
 
     if (data.ok && data.hint) {
-      appendHintToChat(data.hint);
+      appendHintToChat(LangManager.t(data.hint));
     } else {
-      appendHintToChat(`🎯 針對【${state.selectedBoss.name}】，善用「${fwName}」，不要急著給建議，先反應對方的內在感受。`);
+      appendHintToChat(LangManager.t(`🎯 針對【${state.selectedBoss.name}】，善用「${fwName}」，不要急著給建議，先反應對方的內在感受。`));
     }
   } catch (err) {
-    appendHintToChat(`🎯 戰術錦囊：傾聽對方的未滿足需求，試著提問：「聽起來這件事讓你感到有些……對嗎？」`);
+    appendHintToChat(LangManager.t(`🎯 戰術錦囊：傾聽對方的未滿足需求，試著提問：「聽起來這件事讓你感到有些……對嗎？」`));
   } finally {
     elements.btnHint.disabled = false;
-    elements.btnHint.textContent = '💡 戰術錦囊';
+    elements.btnHint.textContent = LangManager.t('💡 戰術錦囊');
   }
 }
 
@@ -1141,26 +1207,30 @@ function renderEvaluationView(evalData) {
     elements.evalExpGain.innerHTML = `🌟 獲得 <b>+${battleResult.gainedExp} EXP</b> （${battleResult.rank.badge} ${battleResult.rank.title}）`;
   }
 
+  const bestQuote = LangManager.t(evalData.bestCoachQuote || '你的耐心傾聽讓對話氛圍充滿安全感。');
+  const winningReason = LangManager.t(evalData.winningReason || '成功引導對方表達真實需求。');
+  const advice = LangManager.t(evalData.advice || '持續練習提問引導，能激發出學員更多自主行動的承諾。');
+
   if (elements.evalQuoteBox) {
     elements.evalQuoteBox.innerHTML = `
       <div class="quote-header">✨ 本次最精彩的教練金句：</div>
-      <div class="quote-text">「${escapeHtml(evalData.bestCoachQuote || '你的耐心傾聽讓對話氛圍充滿安全感。')}」</div>
+      <div class="quote-text">「${escapeHtml(bestQuote)}」</div>
     `;
   }
 
   if (elements.evalWinningReason) {
     elements.evalWinningReason.innerHTML = `
-      <b>🎯 攻心關鍵復盤：</b>${escapeHtml(evalData.winningReason || '成功引導對方表達真實需求。')}
+      <b>🎯 攻心關鍵復盤：</b>${escapeHtml(winningReason)}
     `;
   }
 
   if (elements.evalDimensionsGrid) {
     const dims = [
-      { key: 'empathy', name: '深度同理心', val: evalData.dimensions?.empathy || 75 },
-      { key: 'listening', name: '有效傾聽', val: evalData.dimensions?.listening || 70 },
-      { key: 'questioning', name: '提問引導', val: evalData.dimensions?.questioning || 70 },
-      { key: 'reframing', name: '視角重構', val: evalData.dimensions?.reframing || 75 },
-      { key: 'action_drive', name: '行動激發', val: evalData.dimensions?.action_drive || 65 }
+      { key: 'empathy', name: LangManager.t('深度同理心'), val: evalData.dimensions?.empathy || 75 },
+      { key: 'listening', name: LangManager.t('有效傾聽'), val: evalData.dimensions?.listening || 70 },
+      { key: 'questioning', name: LangManager.t('提問引導'), val: evalData.dimensions?.questioning || 70 },
+      { key: 'reframing', name: LangManager.t('視角重構'), val: evalData.dimensions?.reframing || 75 },
+      { key: 'action_drive', name: LangManager.t('行動激發'), val: evalData.dimensions?.action_drive || 65 }
     ];
 
     elements.evalDimensionsGrid.innerHTML = dims.map(d => `
@@ -1177,11 +1247,15 @@ function renderEvaluationView(evalData) {
   }
 
   if (elements.evalAdviceText) {
-    elements.evalAdviceText.textContent = evalData.advice || '持續練習提問引導，能激發出學員更多自主行動的承諾。';
+    elements.evalAdviceText.textContent = advice;
   }
 
   if (elements.btnEvalSubmitBoard) {
     elements.btnEvalSubmitBoard.style.display = isCaptured ? 'inline-flex' : 'none';
+  }
+
+  if (LangManager.getLang() === 'zh-CN' && elements.viewEvaluation) {
+    LangManager.translateDOM(elements.viewEvaluation);
   }
 }
 
@@ -1249,6 +1323,9 @@ export function openInventoryModal() {
   }
 
   elements.modalInventory?.classList.remove('hidden');
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(elements.modalInventory);
+  }
 }
 
 function renderPokedexCards(categoryFilter = 'all') {
@@ -1299,6 +1376,10 @@ function renderPokedexCards(categoryFilter = 'all') {
       `;
     }
   }).join('');
+
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(elements.pokedexGrid);
+  }
 
   elements.pokedexGrid.querySelectorAll('.btn-view-boss-card').forEach(btn => {
     btn.addEventListener('click', (e) => {
@@ -1351,6 +1432,9 @@ function openBossDetailModal(bossId) {
     `;
   }
   elements.modalBossDetail?.classList.remove('hidden');
+  if (LangManager.getLang() === 'zh-CN' && elements.modalBossDetail) {
+    LangManager.translateDOM(elements.modalBossDetail);
+  }
 }
 
 // ========================================================
@@ -1367,6 +1451,9 @@ export async function openLeaderboardModal() {
 
   if (elements.leaderboardContent) {
     elements.leaderboardContent.innerHTML = LeaderboardManager.renderList(board, currentNick);
+    if (LangManager.getLang() === 'zh-CN') {
+      LangManager.translateDOM(elements.leaderboardContent);
+    }
   }
 }
 
@@ -1380,8 +1467,12 @@ function openSettingsModal() {
   if (elements.inputApiKey) elements.inputApiKey.value = getSavedApiKey();
   if (elements.selectModel) elements.selectModel.value = getSavedModel();
   if (elements.apiTestResult) elements.apiTestResult.textContent = '';
+  if (elements.importResultMsg) elements.importResultMsg.textContent = '';
 
   elements.modalSettings?.classList.remove('hidden');
+  if (LangManager.getLang() === 'zh-CN' && elements.modalSettings) {
+    LangManager.translateDOM(elements.modalSettings);
+  }
 }
 
 function handleSaveSettings() {
@@ -1431,6 +1522,84 @@ async function handleTestApiKey() {
     resultEl.textContent = `❌ 連線錯誤: ${err.message}`;
     resultEl.style.color = '#ef4444';
   }
+}
+
+// ========================================================
+// 首次起程註冊與語言繁簡切換控制器
+// ========================================================
+function openOnboardingModal() {
+  const player = InventoryManager.getPlayerData();
+  if (elements.inputOnboardNickname) {
+    elements.inputOnboardNickname.value = (player.nickname && !player.nickname.startsWith('教練新手#')) 
+      ? player.nickname 
+      : '';
+  }
+  if (elements.selectOnboardAvatar) {
+    elements.selectOnboardAvatar.value = player.avatar || '🧙‍♂️';
+  }
+  elements.modalOnboarding?.classList.remove('hidden');
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(elements.modalOnboarding);
+  }
+  setTimeout(() => elements.inputOnboardNickname?.focus(), 150);
+}
+
+function handleFinishOnboarding() {
+  const name = (elements.inputOnboardNickname?.value || '').trim();
+  const avatar = elements.selectOnboardAvatar?.value || '🧙‍♂️';
+  if (!name) {
+    alert(LangManager.t('請輸入您的冒險者教練代稱！'));
+    elements.inputOnboardNickname?.focus();
+    return;
+  }
+
+  InventoryManager.setNickname(name);
+  InventoryManager.setAvatar(avatar);
+  InventoryManager.setOnboarded(true);
+  elements.modalOnboarding?.classList.add('hidden');
+  refreshPlayerHud();
+  showSystemToast(LangManager.t(`歡迎，【${name}】教練！四大溝通道館已為您開啟！`));
+}
+
+function handleToggleLanguage() {
+  const newLang = LangManager.toggleLang();
+  if (elements.langBtnText) {
+    elements.langBtnText.textContent = newLang === 'zh-CN' ? '繁體' : '簡體';
+  }
+  refreshPlayerHud();
+  renderCategoryTabs();
+  renderBossGrid();
+  showSystemToast(newLang === 'zh-CN' ? '已切换至简体中文（OpenCC）' : '已切換至繁體中文（OpenCC）');
+}
+
+function handleExportBackup() {
+  InventoryManager.exportBackup();
+  showSystemToast(LangManager.t('✅ 存檔備份已下載完成！'));
+}
+
+function handleImportBackupFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const res = InventoryManager.importBackup(e.target.result);
+    if (res.ok) {
+      refreshPlayerHud();
+      renderCategoryTabs();
+      renderBossGrid();
+      if (elements.importResultMsg) {
+        elements.importResultMsg.textContent = LangManager.t(`✅ 成功還原存檔！已收攏 ${res.capturesCount} 位關主！`);
+        elements.importResultMsg.style.color = '#10b981';
+      }
+      alert(LangManager.t(`🎉 存檔還原成功！\n冒險者：${res.player.avatar} ${res.player.nickname}\n已收攏關主：${res.capturesCount} 位\n累積經驗值：${res.totalExp} EXP`));
+    } else {
+      if (elements.importResultMsg) {
+        elements.importResultMsg.textContent = LangManager.t(`❌ 還原失敗：${res.error}`);
+        elements.importResultMsg.style.color = '#ef4444';
+      }
+      alert(LangManager.t(`還原失敗: ${res.error}`));
+    }
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 async function checkApiStatus() {

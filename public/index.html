@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <script src="js/opencc-bundle.js"></script>
 </head>
 <body>
 
@@ -31,6 +32,11 @@
     </div>
 
     <div class="nav-right">
+      <button class="nav-btn" id="btnToggleLang" title="繁簡轉換 (OpenCC)">
+        <span>🌐</span>
+        <span class="nav-text" id="langBtnText">簡體</span>
+      </button>
+
       <button class="nav-btn nav-btn-highlight" id="btnNavMultiplayer" title="多人連線約戰大廳">
         <span>⚔️</span>
         <span class="nav-text">多人約戰</span>
@@ -316,8 +322,11 @@
         </div>
       </div>
 
-      <div class="modal-footer">
-        <button class="btn btn-outline btn-sm" data-close-modal>關閉圖鑑</button>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-sm" id="btnPokedexExport" title="將百寶箱與所有心得卡下載為 JSON 檔案">
+          📤 匯出百寶箱存檔
+        </button>
+        <button class="btn btn-primary btn-sm" data-close-modal>關閉圖鑑</button>
       </div>
     </div>
   </div>
@@ -526,11 +535,78 @@
             </button>
             <span id="apiTestResult" class="test-result-inline"></span>
           </div>
+
+          <div class="form-divider"></div>
+
+          <div class="form-group">
+            <label><b>💾 存檔資料管理（永久保存保證）</b></label>
+            <p style="font-size: 0.85rem; color: #64748b; margin: 0.25rem 0 0.75rem 0; line-height: 1.4;">
+              你的所有 16 位關主闖關進度、百寶箱心得卡與等級皆自動保存在本機。可隨時備份為 JSON 檔案，跨裝置還原：
+            </p>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-outline btn-sm" id="btnExportSave">
+                📤 匯出存檔備份 (.json)
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" id="btnImportSave">
+                📥 匯入存檔備份
+              </button>
+              <input type="file" id="inputImportFile" accept=".json" style="display: none;">
+            </div>
+            <span id="importResultMsg" style="font-size: 0.85rem; margin-top: 0.5rem; display: block;"></span>
+          </div>
         </form>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline btn-sm" data-close-modal>取消</button>
         <button class="btn btn-primary btn-sm" id="btnSaveSettings">儲存設定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 6: 冒險者首次啟程儀式 (Onboarding Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalOnboarding">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>🌟 歡迎來到 CoachQuest 教練冒險道館！</h3>
+      </div>
+      <div class="modal-body">
+        <p style="color: #475569; font-size: 0.95rem; margin-bottom: 1.25rem; line-height: 1.5;">
+          在踏上挑戰 16 位關主的破心旅程前，請先為自己設定專屬的<b>教練代稱</b>與<b>代表形象</b>：
+        </p>
+
+        <form class="settings-form" onsubmit="return false;">
+          <div class="form-group">
+            <label for="inputOnboardNickname"><b>冒險者教練代稱</b></label>
+            <input type="text" id="inputOnboardNickname" placeholder="例如：傾聽大師、破冰小陳、Sunny教練" maxlength="16" required>
+            <small class="form-help">代稱將顯示於對決畫面、百寶箱心得卡與前 10 排行榜。</small>
+          </div>
+
+          <div class="form-group">
+            <label for="selectOnboardAvatar"><b>代表形象頭像</b></label>
+            <select id="selectOnboardAvatar">
+              <option value="🧙‍♂️">🧙‍♂️ 溝通魔法師</option>
+              <option value="🧝‍♀️">🧝‍♀️ 心靈精靈</option>
+              <option value="🧑‍💼">🧑‍💼 專業職場教練</option>
+              <option value="🦸‍♂️">🦸‍♂️ 破冰超人</option>
+              <option value="🌸">🌸 溫柔傾聽者</option>
+              <option value="🦊">🦊 敏銳洞察狐</option>
+              <option value="🦁">🦁 勇氣領航獅</option>
+            </select>
+          </div>
+
+          <div class="save-guarantee-card" style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 0.85rem 1rem; margin-top: 1rem;">
+            <div style="font-weight: 700; color: #166534; font-size: 0.9rem; margin-bottom: 0.35rem;">🛡️ 成績永續保存承諾</div>
+            <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.85rem; color: #15803d; line-height: 1.5;">
+              <li>你的關卡進度、最高得分、收攏關主圖鑑與經驗值皆<b>自動永續保存於此瀏覽器中</b>，關閉或重新整理不會重來！</li>
+              <li>隨時可至「設定」或「百寶箱」隨時<b>匯出 JSON 存檔備份</b>，跨裝置無痛還原。</li>
+            </ul>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button class="btn btn-primary" id="btnFinishOnboarding" style="width: 100%; padding: 0.75rem; font-size: 1.05rem;">
+          🚀 開啟教練大冒險！
+        </button>
       </div>
     </div>
   </div>

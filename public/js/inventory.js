@@ -217,5 +217,87 @@ export const InventoryManager = {
       categoryStats,
       capturedMap: data.captures
     };
+  },
+
+  // 檢查是否已完成首次登錄起程設定
+  isOnboarded() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem('coachquest_onboarded_v1') === 'true';
+      }
+    } catch (_) {}
+    return false;
+  },
+
+  // 標記已完成首次登錄
+  setOnboarded(value = true) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('coachquest_onboarded_v1', value ? 'true' : 'false');
+      }
+    } catch (_) {}
+  },
+
+  // 匯出完整存檔備份 (下載 JSON 檔案)
+  exportBackup() {
+    const data = this.getPlayerData();
+    const backupObj = {
+      version: '2.5.0',
+      exportedAt: new Date().toISOString(),
+      playerData: data,
+      customApiKey: (typeof localStorage !== 'undefined' && localStorage.getItem('coachquest_custom_api_key')) || '',
+      customModel: (typeof localStorage !== 'undefined' && localStorage.getItem('coachquest_custom_model')) || '',
+      lang: (typeof localStorage !== 'undefined' && localStorage.getItem('coachquest_lang')) || 'zh-TW'
+    };
+
+    const jsonStr = JSON.stringify(backupObj, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cleanNick = (data.nickname || 'Coach').replace(/[^\w\u4e00-\u9fa5]/g, '_');
+    a.download = `CoachQuest_Save_${cleanNick}_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return true;
+  },
+
+  // 匯入存檔備份 (解析 JSON 並覆蓋復原)
+  importBackup(jsonString) {
+    try {
+      const parsed = JSON.parse(jsonString);
+      if (!parsed || typeof parsed !== 'object') {
+        throw new Error('存檔檔案格式錯誤');
+      }
+      const pData = parsed.playerData || parsed;
+      if (!pData || typeof pData !== 'object') {
+        throw new Error('找不到合法的玩家存檔資料');
+      }
+
+      const sanitized = this._sanitize(pData);
+      this.savePlayerData(sanitized);
+      this.setOnboarded(true);
+
+      if (parsed.customApiKey && typeof localStorage !== 'undefined') {
+        localStorage.setItem('coachquest_custom_api_key', parsed.customApiKey);
+      }
+      if (parsed.customModel && typeof localStorage !== 'undefined') {
+        localStorage.setItem('coachquest_custom_model', parsed.customModel);
+      }
+      if (parsed.lang && typeof localStorage !== 'undefined') {
+        localStorage.setItem('coachquest_lang', parsed.lang);
+      }
+
+      return {
+        ok: true,
+        player: sanitized,
+        capturesCount: Object.keys(sanitized.captures || {}).length,
+        totalExp: sanitized.totalExp
+      };
+    } catch (err) {
+      return { ok: false, error: err.message || '存檔解析失敗' };
+    }
   }
 };
