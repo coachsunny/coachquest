@@ -13,7 +13,8 @@ import {
   buildCoopSynergyEvaluationPrompt
 } from '../../lib/prompts.js';
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const CANDIDATE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
+const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 
 // 記憶體備援前 10 名排行榜（在無 Cloudflare KV 時提供即時回饋）
 let memoryLeaderboard = [
@@ -99,65 +100,102 @@ function resolveApiKey(reqBody, env) {
 }
 
 /**
- * 呼叫 Gemini 官方 REST API
+ * 呼叫 Gemini 官方 REST API (支援多候選模型自動降級備援)
  */
 async function callGeminiApi({ apiKey, model, systemPrompt, contents }) {
   if (!apiKey) {
     throw new Error('伺服器與客戶端皆未偵測到 Gemini API Key。請在 .dev.vars、Cloudflare Secrets 或右上角設定中填入金鑰。');
   }
 
-  const targetModel = model || DEFAULT_MODEL;
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+  const requestedModel = model || DEFAULT_MODEL;
+  // 建立候選模型順序：指定模型排首位，其餘模型依序備援
+  const modelsToTry = [
+    requestedModel,
+    ...CANDIDATE_MODELS.filter(m => m !== requestedModel)
+  ];
 
-  const payload = {
-    contents: contents,
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 1200,
-      responseMimeType: "application/json"
-    }
-  };
+  let lastError = null;
 
-  if (systemPrompt) {
-    payload.systemInstruction = {
-      parts: [{ text: systemPrompt }]
-    };
-  }
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    let errMsg = `Gemini API 回應異常 (HTTP ${res.status})`;
+  for (const targetModel of modelsToTry) {
     try {
-      const errJson = JSON.parse(errText);
-      if (errJson.error && errJson.error.message) {
-        errMsg = errJson.error.message;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+
+      const payload = {
+        contents: contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1200,
+          responseMimeType: "application/json"
+        }
+      };
+
+      if (systemPrompt) {
+        payload.systemInstruction = {
+          parts: [{ text: systemPrompt }]
+        };
       }
-    } catch (_) {}
-    throw new Error(errMsg);
-  }
 
-  const data = await res.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    throw new Error('Gemini API 未回傳有效文字內容');
-  }
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
 
-  const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-  try {
-    return JSON.parse(cleanJson);
-  } catch (err) {
-    const matched = cleanJson.match(/\{[\s\S]*\}/);
-    if (matched) {
-      return JSON.parse(matched[0]);
+      if (!res.ok) {
+        const errText = await res.text();
+        let errMsg = `Gemini API 回應異常 (${targetModel}: HTTP ${res.status})`;
+        try {
+          const errJson = JSON.parse(errText);
+          if (errJson.error && errJson.error.message) {
+            errMsg = `${targetModel} 錯誤: ${errJson.error.message}`;
+          }
+        } catch (_) {}
+        lastError = new Error(errMsg);
+
+        // 若為 404 (模型停用/不存在)、503 (過載) 或 429 (配額限制)，自動切換至下一個備援模型
+        if (res.status === 404 || res.status === 503 || res.status === 429) {
+          console.warn(`[Gemini Fallback] 模型 ${targetModel} 狀態異常 (HTTP ${res.status})，嘗試備援模型...`);
+          continue;
+        } else {
+          // 其他如 400 Bad Request、401 Invalid Key 等不可復原錯誤直接拋出
+          throw lastError;
+        }
+      }
+
+      const data = await res.json();
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) {
+        throw new Error(`Gemini API (${targetModel}) 未回傳有效文字內容`);
+      }
+
+      const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+      try {
+        return JSON.parse(cleanJson);
+      } catch (err) {
+        const matched = cleanJson.match(/\{[\s\S]*\}/);
+        if (matched) {
+          return JSON.parse(matched[0]);
+        }
+        throw new Error('模型未回傳正確的 JSON 格式: ' + rawText.substring(0, 100));
+      }
+    } catch (err) {
+      lastError = err;
+      const isRetryable = err.message && (
+        err.message.includes('404') || 
+        err.message.includes('503') || 
+        err.message.includes('429') || 
+        err.message.includes('not found') ||
+        err.message.includes('overloaded')
+      );
+      if (isRetryable && modelsToTry.indexOf(targetModel) < modelsToTry.length - 1) {
+        console.warn(`[Gemini Fallback] 呼叫 ${targetModel} 失敗: ${err.message}，切換下一個模型...`);
+        continue;
+      }
+      throw err;
     }
-    throw new Error('模型未回傳正確的 JSON 格式: ' + rawText.substring(0, 100));
   }
+
+  throw lastError || new Error('所有備援模型呼叫皆失敗');
 }
 
 // 根據玩家身份保護機密提示卡（關主看得見、教練看不見）
