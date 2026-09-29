@@ -80,6 +80,12 @@ npx wrangler dev
 
 ---
 
+## 📖 完整設計與交接文檔
+- 詳細架構、API 接口規格、多人約戰模式、繁簡轉換、升等數值模型與未來的開發路線圖，請參閱：
+  👉 **[PROJECT_HANDOVER.md](./PROJECT_HANDOVER.md)**
+
+---
+
 ## 🔒 獨立專案說明
 - 本專案完整建置於 `d:\CoachQuest`，具備獨立的前後端與設定檔。
 - **原專案 `d:\Coach`（CoachLab）百分之百保持原狀，未做任何修改，確保歷史資產安全無虞。**
