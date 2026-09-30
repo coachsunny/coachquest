@@ -116,6 +116,7 @@ body {
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius-full);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .player-hud {
@@ -128,6 +129,20 @@ body {
   border-radius: var(--radius-full);
   font-size: 0.85rem;
   font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.player-hud:hover {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.hud-player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .hud-level {
@@ -137,6 +152,11 @@ body {
   border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.player-title-tag {
+  white-space: nowrap;
 }
 
 .hud-captures {
@@ -145,6 +165,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  white-space: nowrap;
 }
 
 .nav-right {
@@ -1233,149 +1254,7 @@ body {
  display: none !important;
 }
 
-/* ================== Mobile Responsiveness (< 768px) ================== */
-@media (max-width: 768px) {
- .navbar {
- padding: 0.45rem 0.75rem;
- height: 52px;
- }
- .brand-title {
- font-size: 1.05rem;
- }
- .player-hud {
- padding: 0.25rem 0.55rem;
- font-size: 0.75rem;
- gap: 0.45rem;
- }
- .nav-btn {
- padding: 0.35rem 0.55rem;
- font-size: 0.78rem;
- }
- .nav-text {
- display: none; /* Icon-only on mobile */
- }
 
- .quest-map-container {
- padding: 0 0.85rem;
- margin: 1rem auto 2.5rem;
- }
- .map-hero {
- flex-direction: column;
- text-align: center;
- padding: 1.5rem 1rem;
- gap: 1rem;
- }
- .map-hero-text h1 {
- font-size: 1.5rem;
- justify-content: center;
- }
- .map-hero-text p {
- font-size: 0.86rem;
- }
-
- .boss-grid {
- grid-template-columns: 1fr;
- gap: 1rem;
- }
-
- /* Battle Arena on Mobile */
- .battle-container {
- height: calc(100vh - 52px);
- height: calc(100dvh - 52px);
- padding: 0.35rem 0.5rem 0.5rem;
- }
- .battle-header {
- padding: 0.5rem 0.65rem;
- margin-bottom: 0.35rem;
- }
- .battle-boss-avatar {
- width: 34px;
- height: 34px;
- font-size: 1.15rem;
- }
- .battle-boss-name {
- font-size: 0.92rem;
- }
- .battle-scenario-brief {
- font-size: 0.72rem;
- }
- .battle-header-controls {
- padding-top: 0.35rem;
- }
- .battle-turn-counter {
- font-size: 0.74rem;
- }
-
- .battle-chat-viewport {
- padding: 0.6rem 0.5rem;
- }
- .message-row {
- max-width: 92%;
- gap: 0.45rem;
- }
- .message-avatar {
- width: 28px;
- height: 28px;
- font-size: 0.9rem;
- }
- .message-bubble {
- padding: 0.55rem 0.8rem;
- font-size: 0.9rem;
- }
-
- .battle-input-panel {
- padding: 0.45rem 0.55rem;
- }
- .battle-input-toolbar {
- margin-bottom: 0.35rem;
- padding-bottom: 0.35rem;
- }
- .tool-btn {
- padding: 0.25rem 0.5rem;
- font-size: 0.74rem;
- }
- .toggle-label {
- font-size: 0.72rem;
- }
-
- .battle-input-form textarea {
- height: 48px;
- font-size: 16px !important; /* Prevents auto zoom */
- padding: 0.5rem 0.65rem;
- }
- .btn-send {
- height: 48px;
- padding: 0 1rem;
- font-size: 0.9rem;
- }
-
- .eval-container {
- padding: 0 0.85rem;
- margin: 1rem auto 2.5rem;
- }
- .victory-hero-card {
- padding: 1.5rem 1rem;
- }
- .victory-title {
- font-size: 1.4rem;
- }
- .dimension-grid {
- grid-template-columns: 1fr;
- gap: 0.75rem;
- }
- .eval-actions .btn {
- width: 100%;
- }
-
- .pokedex-grid {
- grid-template-columns: 1fr;
- }
-
- .modal-dialog {
- max-width: 100%;
- margin: 0 0.5rem;
- }
-}
 
 
 /* ================== Category Navigation Tabs ================== */
@@ -1769,12 +1648,13 @@ body {
 /* 語言切換按鈕 */
 #btnToggleLang {
   font-weight: 700;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border-color);
+  background: transparent;
   transition: all 0.2s ease;
 }
 #btnToggleLang:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--bg-subtle);
+  border-color: #cbd5e1;
   transform: translateY(-1px);
 }
 
@@ -1785,6 +1665,579 @@ body {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* ========================================================
+   行動端全面響應式設計 (Mobile Responsiveness < 768px)
+   ======================================================== */
+@media (max-width: 768px) {
+  /* --- 頂部導航列 (Navbar & Player HUD) --- */
+  .navbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.75rem 0.45rem;
+    height: auto;
+    min-height: 52px;
+    gap: 0.35rem 0;
+  }
+
+  .nav-left {
+    order: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+  }
+
+  .brand {
+    gap: 0.4rem;
+  }
+
+  .brand-icon {
+    font-size: 1.45rem;
+  }
+
+  .brand-title {
+    font-size: 1.12rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  /* 行動端隱藏「寶可夢對決版」副標籤，避免窄螢幕被擠壓成單字直列下垂 */
+  .brand-badge {
+    display: none !important;
+  }
+
+  .nav-right {
+    order: 2;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-shrink: 0;
+  }
+
+  .nav-btn {
+    padding: 0.35rem 0.45rem;
+    min-width: 34px;
+    height: 34px;
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .nav-text {
+    display: none !important; /* 行動端純圖示精簡模式 */
+  }
+
+  /* 玩家 HUD 於行動端呈獨立條狀，佔滿第二列，不再與按鈕爭奪空間 */
+  .player-hud {
+    order: 3;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.45rem;
+    background: #f1f5f9;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+
+  .hud-player-info {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #hudPlayerName {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 700;
+    font-size: 0.78rem;
+    max-width: 110px;
+  }
+
+  .hud-level {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.4rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .player-title-tag {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 85px;
+  }
+
+  .hud-captures {
+    font-size: 0.76rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  /* 對決模式進行時，隱藏行動端 HUD 膠囊條以釋放最大聊天視野 */
+  body[data-view="battle"] .player-hud,
+  body:has(#viewBattle.active) .player-hud {
+    display: none !important;
+  }
+
+  /* --- 地圖與英雄橫幅 (Quest Map & Hero) --- */
+  .quest-map-container {
+    padding: 0 0.85rem;
+    margin: 0.85rem auto 2.5rem;
+  }
+
+  .map-hero {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.25rem 1rem;
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+    border-radius: var(--radius-md);
+  }
+
+  .map-hero-text h1 {
+    font-size: 1.35rem;
+    justify-content: center;
+    margin-bottom: 0.35rem;
+  }
+
+  .map-hero-text p {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: #e2e8f0;
+  }
+
+  .map-hero-badge {
+    padding: 0.65rem 1.25rem;
+    border-radius: var(--radius-sm);
+  }
+
+  .map-hero-badge .badge-val {
+    font-size: 1.6rem;
+  }
+
+  .map-hero-badge .badge-lbl {
+    font-size: 0.72rem;
+  }
+
+  /* --- 分類頁籤 (Category Tabs) --- */
+  .category-tabs {
+    gap: 0.45rem;
+    padding: 0.2rem 0 0.5rem;
+    margin-bottom: 1rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .category-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .category-tab-btn {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+    gap: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  .category-tab-badge {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.4rem;
+  }
+
+  /* --- 場景標題與描述 (Section Header) --- */
+  /* 行動端由水平橫排改為垂直排列，解決「道館關卡」中間斷行問題 */
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .section-header h2 {
+    font-size: 1.2rem;
+    line-height: 1.35;
+    word-break: keep-all;
+  }
+
+  .section-desc {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* --- 關主卡片列表網格 (Boss Grid) --- */
+  .boss-grid {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .boss-card {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+  }
+
+  .boss-card.captured::after {
+    top: 0.75rem;
+    right: 0.75rem;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  .boss-avatar-box {
+    width: 44px;
+    height: 44px;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+
+  .boss-name {
+    font-size: 1rem;
+  }
+
+  .boss-title {
+    font-size: 0.75rem;
+  }
+
+  .boss-body {
+    font-size: 0.82rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .boss-scenario-desc {
+    margin-bottom: 0.5rem;
+    line-height: 1.45;
+  }
+
+  .boss-weakness-bar {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.74rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+  }
+
+  .boss-difficulty-row {
+    font-size: 0.76rem;
+    margin-top: 0.35rem;
+  }
+
+  .boss-footer {
+    padding-top: 0.75rem;
+  }
+
+  .btn-challenge {
+    padding: 0.45rem 1rem;
+    font-size: 0.85rem;
+    min-height: 38px;
+  }
+
+  /* --- 對戰視圖 (Battle Arena) --- */
+  .battle-container {
+    height: calc(100vh - 54px);
+    height: calc(100dvh - 54px);
+    padding: 0.35rem 0.5rem 0.5rem;
+  }
+
+  .battle-header {
+    padding: 0.45rem 0.6rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .battle-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .battle-boss-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .battle-boss-title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .battle-boss-name {
+    font-size: 0.92rem;
+  }
+
+  .battle-boss-role {
+    font-size: 0.7rem;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .battle-boss-badge {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.35rem;
+  }
+
+  .battle-scenario-brief {
+    font-size: 0.72rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .battle-header-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-top: 0.35rem;
+  }
+
+  .battle-boss-weakness {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.4rem;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .battle-hp-wrap {
+    flex: 1;
+    min-width: 90px;
+  }
+
+  .battle-turn-counter {
+    font-size: 0.72rem;
+  }
+
+  .battle-chat-viewport {
+    padding: 0.6rem 0.5rem;
+  }
+
+  .message-row {
+    max-width: 95%;
+    gap: 0.45rem;
+  }
+
+  .message-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+
+  .message-bubble {
+    padding: 0.55rem 0.8rem;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+
+  .battle-input-panel {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .battle-input-toolbar {
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.3rem;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .tool-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.74rem;
+  }
+
+  .toggle-label {
+    font-size: 0.72rem;
+  }
+
+  .battle-input-form textarea {
+    height: 46px;
+    font-size: 16px !important; /* 防止 iOS Safari 自動放大畫面 */
+    padding: 0.45rem 0.65rem;
+  }
+
+  .btn-send {
+    height: 46px;
+    padding: 0 0.85rem;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  /* --- 收攏結算視圖 (Evaluation) --- */
+  .eval-container {
+    padding: 0 0.75rem;
+    margin: 0.75rem auto 2.5rem;
+  }
+
+  .victory-hero-card {
+    padding: 1.25rem 0.85rem;
+  }
+
+  .victory-title {
+    font-size: 1.25rem;
+  }
+
+  .score-badge-circle {
+    width: 72px;
+    height: 72px;
+    font-size: 1.35rem;
+  }
+
+  .dimension-grid {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .eval-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .eval-actions .btn {
+    width: 100%;
+  }
+
+  /* --- 彈出視窗 (Modals) --- */
+  .modal-overlay {
+    padding: 0.5rem;
+  }
+
+  .modal-dialog {
+    max-width: 100%;
+    margin: 0;
+    max-height: 94vh;
+    max-height: 94dvh;
+    border-radius: var(--radius-md);
+  }
+
+  .modal-header {
+    padding: 0.75rem 1rem;
+  }
+
+  .modal-header h3 {
+    font-size: 1rem;
+  }
+
+  .modal-body {
+    padding: 0.85rem 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-footer {
+    padding: 0.65rem 1rem;
+    flex-wrap: wrap;
+  }
+
+  .pokedex-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  /* --- 多人連線視窗響應式 (Multiplayer Modal) --- */
+  .multiplayer-mode-grid {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .mode-select-card {
+    padding: 0.9rem 0.8rem;
+  }
+
+  .room-code-hero {
+    padding: 1rem;
+  }
+
+  .room-code-number {
+    font-size: 2.2rem;
+    letter-spacing: 0.15em;
+  }
+
+  .waiting-room-players {
+    padding: 0.85rem 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .waiting-player-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 1.6rem;
+  }
+
+  .waiting-player-name {
+    font-size: 0.85rem;
+  }
+
+  .opponent-live-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .opponent-progress-bar {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .client-secret-box {
+    padding: 0.65rem 0.8rem;
+  }
+}
+
+/* --- 超窄螢幕微調 (< 400px，如 iPhone SE / 小型 Android) --- */
+@media (max-width: 400px) {
+  .navbar {
+    padding: 0.35rem 0.5rem 0.35rem;
+  }
+
+  .brand-title {
+    font-size: 1.02rem;
+  }
+
+  .nav-btn {
+    min-width: 30px;
+    height: 32px;
+    padding: 0.25rem 0.35rem;
+    font-size: 0.88rem;
+  }
+
+  .player-hud {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.74rem;
+  }
+
+  #hudPlayerName {
+    max-width: 90px;
+  }
+
+  .player-title-tag {
+    max-width: 65px;
+  }
 }
 
 

@@ -177,6 +177,7 @@ export function initApp() {
   try {
     initElements();
     bindEvents();
+    document.body.dataset.view = 'map';
 
     // 語言偏好初始化 (繁/簡體)
     const currentLang = LangManager.getLang();
@@ -673,6 +674,7 @@ function switchView(viewName) {
     elements.viewEvaluation?.classList.add('active');
     state.isBattling = false;
   }
+  document.body.dataset.view = viewName;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
