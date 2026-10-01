@@ -2259,4 +2259,66 @@ body {
   }
 }
 
+/* ================== Settings Form & Form Controls ================== */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.settings-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.settings-form .form-group label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.settings-form .form-group input,
+.settings-form .form-group select {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: var(--radius-sm, 6px);
+  background: #ffffff;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.settings-form .form-group input:focus,
+.settings-form .form-group select:focus {
+  border-color: var(--primary, #4f46e5);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.settings-form .form-help {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.4;
+  margin-top: 0.15rem;
+}
+
+.settings-form .form-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 0.4rem 0;
+}
+
+.settings-form .form-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+
 
