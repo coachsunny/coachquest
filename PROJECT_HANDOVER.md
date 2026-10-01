@@ -1,9 +1,9 @@
 # 🎮 CoachQuest (教練大冒險) - 完整架構規劃、設計與交接手冊
 > **專案代號**：CoachQuest  
-> **當前版本**：v2.5.0 (Stable Live)  
+> **當前版本**：v2.6.0 (Dual-Engine Live)  
 > **GitHub 倉庫**：https://github.com/coachsunny/coachquest  
 > **Cloudflare 線上網址**：https://coachquest.coachsunny.workers.dev  
-> **撰寫日期**：2026-09-29  
+> **撰寫日期**：2026-10-01  
 > **目標**：供後續對話框、團隊成員或自主 Agent 100% 無縫接手、持續維護與功能擴充。
 
 ---
@@ -22,16 +22,23 @@ graph TD
     Client[學員瀏覽器 / 手機 SPA] -->|靜態資產載入| CFAssets[Cloudflare Static Assets /public]
     Client -->|REST API 呼叫| Worker[Cloudflare Worker /worker.js]
     Worker -->|路由轉發| Router[functions/api/[[catchall]].js]
-    Router -->|全域金鑰 / 多模型降級備援| Gemini[Google Gemini API v1beta]
+    Router -->|雙引擎智慧分流| RouterEngine{金鑰特徵/模型選擇}
+    RouterEngine -->|sk-... 協定 / deepseek-chat| DeepSeek[DeepSeek REST API OpenAI相容]
+    RouterEngine -->|AIza... 協定 / gemini-*| Gemini[Google Gemini API v1beta 多模型降級備援]
     Router -->|房間狀態 / 競速同步 / AI裁判| ActiveRooms[Active Rooms Map快取池]
     Router -->|前10名排行榜持久化| KV[Cloudflare KV / 記憶體備援]
 ```
 
 ### 技術棧一覽
 - **執行環境**：Cloudflare Workers (Edge Serverless) + Static Assets
-- **AI 驅動模型**：Google Gemini REST API
-  - **預設首選**：`gemini-3.5-flash-lite`（極速回應，平均約 900ms，對話體驗極佳）
-  - **自動降級備援池**：`gemini-3.8-flash` $\to$ `gemini-3.1-flash-lite` $\to$ `gemini-flash-latest` $\to$ `gemini-2.5-flash`（遇到 404/503/429 自動無縫切換，保證對決不中斷）
+- **AI 雙模驅動引擎 (Dual-Engine LLM)**：
+  - **DeepSeek 引擎 (OpenAI 相容協議)**：
+    - 首選推薦：`deepseek-chat` (DeepSeek-V3)，高智商、語意同理極度敏銳、性價比極高。
+    - 推理模型：`deepseek-reasoner` (DeepSeek-R1)，深度思考鏈演繹。
+  - **Google Gemini 引擎 (原生 REST API)**：
+    - 快速首選：`gemini-3.5-flash-lite`（平均回應約 900ms）
+    - 自動降級備援池：`gemini-3.8-flash` $\to$ `gemini-3.1-flash-lite` $\to$ `gemini-flash-latest` $\to$ `gemini-2.5-flash`
+  - **金鑰智慧相容判定**：Key 前綴以 `sk-` 開頭自動走 DeepSeek；以 `AIza` 開頭自動走 Gemini。伺服器端同時支援 `DEEPSEEK_API_KEY` 與 `GEMINI_API_KEY`。
 - **前端架構**：原生 ES6+ Modules（零打包依賴、極致輕量、原生速度、移動端 100% 自適應）
 - **繁簡轉換模組**：OpenCC 離線包 (`public/js/opencc-bundle.js` + `public/js/lang.js`)
 - **本地持久化**：HTML5 LocalStorage + JSON 一鍵匯出 / 匯入備份
@@ -109,7 +116,8 @@ graph TD
 - 支援使用者偏好記憶與瀏覽器語系自動適應。
 
 ### ⑩ 全域免填金鑰託管 (Zero-Setup Key)
-- 透過 Cloudflare Secret `GEMINI_API_KEY` 在伺服器端統一託管，學員與玩家開箱即用，免填任何 API Key。同時保留個人自備金鑰覆蓋機制。
+- 透過 Cloudflare Secret `DEEPSEEK_API_KEY` 或 `GEMINI_API_KEY` 在伺服器端統一託管，學員與玩家開箱即用，免填任何 API Key。
+- 支援雙模並存：若同時設定兩把 Key，系統支援自適應分流或前端下拉選單自由指定；若僅設定其中一把，系統自動以可用引擎為主。同時保留個人自備金鑰覆蓋機制。
 
 ---
 
@@ -187,8 +195,11 @@ git push origin main
 Cloudflare Workers Builds 偵測到 `main` 分支 push 後，將在 **20-40 秒內自動拉取並發布上線**！
 
 ### ③ Cloudflare 環境變數維護提醒
-- **全域金鑰**：在 Cloudflare Dashboard $\to$ `Workers & Pages` $\to$ `coachquest` $\to$ `Settings` $\to$ `Variables and secrets`。
-- **重要**：必須將 `GEMINI_API_KEY` 設為 **「加密密鑰 (Secret)」**，絕不可設為明文「變數 (Variable)」，因為公開倉庫的 `wrangler.toml` 未聲明 `[vars]`，每次 Git 自動部署會清除明文變數，但會**百分之百保留加密密鑰**！
+- **全域金鑰設定**：在 Cloudflare Dashboard $\to$ `Workers & Pages` $\to$ `coachquest` $\to$ `Settings` $\to$ `Variables and secrets`。
+- **支援名稱**：
+  - `DEEPSEEK_API_KEY`：填入 DeepSeek API 金鑰 (`sk-...`)
+  - `GEMINI_API_KEY`：填入 Google Gemini API 金鑰 (`AIzaSy...`)
+- **重要**：必須將金鑰設為 **「加密密鑰 (Secret)」**，絕不可設為明文「變數 (Variable)」，因為公開倉庫的 `wrangler.toml` 未聲明 `[vars]`，每次 Git 自動部署會清除明文變數，但會**百分之百保留加密密鑰**！
 
 ---
 

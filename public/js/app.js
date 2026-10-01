@@ -1511,7 +1511,7 @@ async function handleTestApiKey() {
     });
     const data = await res.json();
     if (data.ok) {
-      resultEl.textContent = `✅ 連線成功！${data.message || 'Gemini 運作無誤'}`;
+      resultEl.textContent = `✅ 連線成功！${data.message || 'AI 引擎運作無誤'}`;
       resultEl.style.color = '#10b981';
       if (elements.apiStatusDot) {
         elements.apiStatusDot.className = 'status-dot dot-ok';
@@ -1626,10 +1626,12 @@ function getSavedApiKey() {
 
 function getSavedModel() {
   const saved = localStorage.getItem('coachquest_custom_model');
-  if (!saved || saved.includes('2.5')) {
-    return 'gemini-3.5-flash-lite';
+  if (saved) return saved;
+  const key = getSavedApiKey();
+  if (key && key.startsWith('sk-') && !key.startsWith('AIza')) {
+    return 'deepseek-chat';
   }
-  return saved;
+  return 'deepseek-chat';
 }
 
 function showSystemToast(msg) {

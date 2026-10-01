@@ -1,7 +1,8 @@
 # 🎮 CoachQuest 教練大冒險
 
 > **寶可夢風格溝通對決 · 百寶箱圖鑑 · 冒險者排行榜**  
-> 基於 Cloudflare Workers 全球邊緣運算 + Google Gemini 2.5 大模型打造的全新獨立遊戲化教練培訓系統。
+> 基於 Cloudflare Workers 全球邊緣運算 + DeepSeek / Google Gemini 雙引擎打造的全新獨立遊戲化教練培訓系統。
+
 
 ---
 
@@ -48,9 +49,9 @@ npx wrangler dev
 ```
 瀏覽器開啟提示的網址（通常為 `http://localhost:8787`）即可體驗完整的溝通對決。
 
-### 步驟 2：設定 Gemini API Key
-- 可在網頁右上角的 **「⚙️ 設定」** 彈窗中輸入個人的 Gemini API Key 並即時測試連線。
-- 亦可在伺服器端環境變數配置，對所有學員免配置開箱即用。
+### 步驟 2：設定 AI API Key (DeepSeek 或 Gemini)
+- 可在網頁右上角的 **「⚙️ 設定」** 彈窗中輸入個人的 DeepSeek (`sk-...`) 或 Gemini (`AIzaSy...`) API Key 並即時測試連線。
+- 亦可在伺服器端配置全域 Secret，對所有學員免配置開箱即用。
 
 ---
 
@@ -61,11 +62,17 @@ npx wrangler dev
    npx wrangler login
    ```
 
-2. **（選填）綁定全域 Gemini API Key 密鑰**：
+2. **（選填）綁定全域 API Key 密鑰 (DeepSeek 或 Gemini 皆可)**：
    ```bash
+   # 設定 DeepSeek 金鑰
+   npx wrangler secret put DEEPSEEK_API_KEY
+   # 貼上您的 DeepSeek API Key (sk-...)
+
+   # 或設定 Gemini 金鑰
    npx wrangler secret put GEMINI_API_KEY
-   # 貼上您的 Gemini API Key
+   # 貼上您的 Gemini API Key (AIzaSy...)
    ```
+
 
 3. **（選填）建立 KV 命名空間供持久化排行榜**：
    ```bash
