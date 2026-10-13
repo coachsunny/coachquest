@@ -884,14 +884,16 @@ export function startBossBattle(bossId) {
 // ========================================================
 // 對話管理與發送訊息 (支援單人 & 三大約戰模式)
 // ========================================================
-async function handleSendMessage() {
+async function handleSendMessage(overrideText = null) {
   if (state.isWaitingResponse || !state.selectedBoss) return;
   const inputEl = elements.messageInput;
-  const userText = (inputEl.value || '').trim();
+  const userText = (overrideText !== null ? overrideText : (inputEl?.value || '')).trim();
   if (!userText) return;
 
-  inputEl.value = '';
-  inputEl.style.height = 'auto';
+  if (overrideText === null && inputEl) {
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+  }
 
   // 1. 多人模式 B: 真人對決
   if (state.isMultiplayer && state.mpMode === 'human_roleplay') {
@@ -913,6 +915,11 @@ async function handleSendMessage() {
   }
 
   // 3. 單人挑戰 或 多人模式 A（雙人競速）
+  // 防禦：若上一條為未獲回覆的失敗 user 訊息，先移除避免連續堆疊
+  if (state.dialogueHistory.length > 0 && state.dialogueHistory[state.dialogueHistory.length - 1].role === 'user') {
+    state.dialogueHistory.pop();
+  }
+
   const userMsg = { role: 'user', content: userText };
   state.dialogueHistory.push(userMsg);
   appendMessageToChat(userMsg);
@@ -972,7 +979,7 @@ async function handleSendMessage() {
 
   } catch (err) {
     console.error('對戰通訊失敗:', err);
-    appendSystemNotice(LangManager.t(`⚠️ 通訊異常: ${err.message}。若為 API 金鑰問題，可點擊右上角「⚙️ 設定」檢查。`));
+    appendErrorRetryNotice(err.message, userText);
   } finally {
     state.isWaitingResponse = false;
     setTypingIndicator(false);
@@ -1070,6 +1077,61 @@ function appendSystemNotice(text) {
   const row = document.createElement('div');
   row.className = 'system-notice-bar';
   row.textContent = text;
+  elements.chatMessages?.appendChild(row);
+  scrollChatToBottom();
+}
+
+function appendErrorRetryNotice(errorMsg, failedText) {
+  const row = document.createElement('div');
+  row.className = 'system-notice-bar system-error-retry-bar';
+  row.style.background = '#fef2f2';
+  row.style.border = '1.5px solid #fca5a5';
+  row.style.color = '#991b1b';
+  row.style.display = 'flex';
+  row.style.flexDirection = 'column';
+  row.style.alignItems = 'center';
+  row.style.gap = '0.5rem';
+  row.style.padding = '0.75rem 1rem';
+  row.style.margin = '0.65rem auto';
+  row.style.borderRadius = '12px';
+  row.style.maxWidth = '90%';
+
+  const msgSpan = document.createElement('div');
+  msgSpan.style.fontSize = '0.85rem';
+  msgSpan.style.lineHeight = '1.45';
+  msgSpan.textContent = LangManager.t(`⚠️ 連線短暫不穩定：${errorMsg}`);
+  row.appendChild(msgSpan);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex';
+  btnRow.style.gap = '0.6rem';
+  btnRow.style.justifyContent = 'center';
+  btnRow.style.flexWrap = 'wrap';
+
+  if (failedText) {
+    const btnRetry = document.createElement('button');
+    btnRetry.className = 'btn btn-primary btn-sm';
+    btnRetry.style.padding = '0.3rem 0.85rem';
+    btnRetry.style.fontSize = '0.82rem';
+    btnRetry.textContent = LangManager.t('🔄 點擊重試發送');
+    btnRetry.onclick = () => {
+      row.remove();
+      handleSendMessage(failedText);
+    };
+    btnRow.appendChild(btnRetry);
+  }
+
+  const btnSettings = document.createElement('button');
+  btnSettings.className = 'btn btn-outline btn-sm';
+  btnSettings.style.padding = '0.3rem 0.85rem';
+  btnSettings.style.fontSize = '0.82rem';
+  btnSettings.textContent = LangManager.t('⚙️ 切換模型 (Gemini / DeepSeek)');
+  btnSettings.onclick = () => {
+    openSettingsModal();
+  };
+  btnRow.appendChild(btnSettings);
+
+  row.appendChild(btnRow);
   elements.chatMessages?.appendChild(row);
   scrollChatToBottom();
 }

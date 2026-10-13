@@ -276,9 +276,21 @@ async function callDeepSeekApi({ apiKey, model, systemPrompt, messages }) {
   } catch (err) {
     const matched = cleanJson.match(/\{[\s\S]*\}/);
     if (matched) {
-      return JSON.parse(matched[0]);
+      try {
+        return JSON.parse(matched[0]);
+      } catch (_) {}
     }
-    throw new Error('DeepSeek 模型未回傳正確的 JSON 格式: ' + rawText.substring(0, 100));
+
+    // 【智慧容錯】：若模型回傳的是純文字而非 JSON 結構，自動當作關主台詞提取，絕不中斷學生對話
+    if (cleanJson && cleanJson.length > 0) {
+      console.warn('[DeepSeek Fallback] 模型回傳非 JSON 文字，自動提取為對話台詞:', cleanJson.substring(0, 80));
+      return {
+        reply: cleanJson,
+        innerThought: '（若有所思……）'
+      };
+    }
+
+    throw new Error('DeepSeek 模型回應為空或連線不穩定，請重試');
   }
 }
 
