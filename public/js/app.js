@@ -21,6 +21,7 @@ const state = {
   isWaitingResponse: false,
   showInnerThoughts: true,
   currentEvaluation: null,
+  currentViewingBossId: null,
 
   // 多人對戰狀態
   isMultiplayer: false,
@@ -106,6 +107,8 @@ function initElements() {
     btnEvalContinue: document.getElementById('btnEvalContinue'),
     btnEvalRetry: document.getElementById('btnEvalRetry'),
     btnEvalSubmitBoard: document.getElementById('btnEvalSubmitBoard'),
+    btnEvalDownloadReport: document.getElementById('btnEvalDownloadReport'),
+    btnDownloadBossCardReport: document.getElementById('btnDownloadBossCardReport'),
 
     // Modals
     modalInventory: document.getElementById('modalInventory'),
@@ -273,6 +276,8 @@ function bindEvents() {
     }
   });
   elements.btnEvalSubmitBoard?.addEventListener('click', () => handleSubmitScoreToLeaderboard());
+  elements.btnEvalDownloadReport?.addEventListener('click', () => handleDownloadReport());
+  elements.btnDownloadBossCardReport?.addEventListener('click', () => handleDownloadBossCardReport());
 
   // 設定儲存
   elements.btnSaveSettings?.addEventListener('click', () => handleSaveSettings());
@@ -1369,6 +1374,146 @@ async function handleSubmitScoreToLeaderboard() {
 }
 
 // ========================================================
+// 教練對話復盤報告匯出與下載 (.md)
+// ========================================================
+function handleDownloadReport() {
+  if (!state.selectedBoss || !state.currentEvaluation) {
+    alert('目前尚無結算報告可供下載！');
+    return;
+  }
+
+  const boss = state.selectedBoss;
+  const evaluation = state.currentEvaluation;
+  const player = InventoryManager.getPlayerData();
+  const rank = InventoryManager.getPlayerRank(player.totalExp);
+  const score = Number(evaluation.score) || 0;
+  const isCaptured = score >= 70;
+  const fwName = (boss.framework && boss.framework.name) || boss.weaknessName || '非暴力溝通';
+  const nowStr = new Date().toLocaleString('zh-TW', { hour12: false });
+
+  let md = `# 🎮 CoachQuest 教練實戰對話復盤分析報告\n\n`;
+  md += `> **生成時間**：${nowStr}\n`;
+  md += `> **挑戰模式**：${state.isMultiplayer ? '👥 多人連線約戰' : '⚔️ 單人道館挑戰'}\n\n`;
+  md += `---\n\n`;
+
+  md += `## 📋 挑戰概要資訊\n\n`;
+  md += `- **教練冒險者**：${player.avatar} **${player.nickname}**（Lv.${rank.level} ${rank.badge} ${rank.title}）\n`;
+  md += `- **挑戰關主**：${boss.avatar} **${boss.name}**（${boss.title}）\n`;
+  md += `- **情境設定**：${boss.scenario}\n`;
+  md += `- **攻心弱點架構**：${fwName}\n`;
+  md += `- **綜合挑戰成績**：**${score} 分**（${isCaptured ? '🔴 成功收攏入百寶箱' : '💨 心防尚未完全突破'}）\n\n`;
+
+  md += `---\n\n`;
+
+  md += `## ✨ 核心成效與教練金句\n\n`;
+  md += `### 💬 最精彩的教練金句\n`;
+  md += `> 「${evaluation.bestCoachQuote || '你的傾聽給予了對方極大的安全感。'}」\n\n`;
+
+  md += `### 🎯 突破防線關鍵復盤\n`;
+  md += `${evaluation.winningReason || '成功識別了關主的真實需求，引導出自我反思。'}\n\n`;
+
+  md += `### 💡 專家指導與後續建議\n`;
+  md += `${evaluation.advice || '持續維持開放好奇的態度進行深入提問。'}\n\n`;
+
+  md += `---\n\n`;
+
+  md += `## 📊 ICF 教練核心溝通能力五維度分析\n\n`;
+  const dims = evaluation.dimensions || { empathy: 75, listening: 75, questioning: 70, reframing: 70, action_drive: 65 };
+  md += `| 評估維度 | 得分 | 能力說明 |\n`;
+  md += `| :--- | :--- | :--- |\n`;
+  md += `| **深度同理心** | **${dims.empathy || 75} 分** | 準確感知情緒，懸置批判並創造心理安全容器 |\n`;
+  md += `| **有效傾聽** | **${dims.listening || 75} 分** | 聽出話語背後未滿足的普世心理需求與渴望 |\n`;
+  md += `| **提問引導** | **${dims.questioning || 70} 分** | 善用開放式強力問句，促發對方自主思索盲點 |\n`;
+  md += `| **視角重構** | **${dims.reframing || 70} 分** | 協助跳脫受害者姿態，重構正向多元可能視角 |\n`;
+  md += `| **行動激發** | **${dims.action_drive || 65} 分** | 落地承諾，激勵對方自發邁出第一步具體行動 |\n\n`;
+
+  md += `---\n\n`;
+
+  md += `## 📜 完整對決對話實錄 (Dialogue Transcript)\n\n`;
+  if (state.dialogueHistory && state.dialogueHistory.length > 0) {
+    let roundIndex = 1;
+    for (let i = 0; i < state.dialogueHistory.length; i++) {
+      const msg = state.dialogueHistory[i];
+      if (msg.role === 'user') {
+        md += `### 🔹 回合 ${roundIndex} · 教練提問\n`;
+        md += `**${player.avatar} ${player.nickname}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+        roundIndex++;
+      } else {
+        md += `**${boss.avatar} ${boss.name}**：\n${msg.content}\n\n`;
+        if (msg.innerThought) {
+          md += `*💭 關主潛意識心聲：${msg.innerThought}*\n\n`;
+        }
+      }
+    }
+  } else {
+    md += `*（無對話歷史記錄）*\n\n`;
+  }
+
+  md += `---\n\n`;
+  md += `*本報告由 CoachQuest (教練大冒險) 遊戲化培訓系統自動生成 · https://coachquest.coachsunny.workers.dev*\n`;
+
+  downloadMarkdownFile(md, `CoachQuest_教練復盤_${boss.name}_${player.nickname}`);
+}
+
+// 下載百寶箱已解鎖關主的心得卡報告 (.md)
+function handleDownloadBossCardReport() {
+  const bossId = state.currentViewingBossId;
+  if (!bossId) return;
+
+  const boss = getBossById(bossId);
+  const detail = InventoryManager.getCaptureDetail(bossId);
+  if (!boss || !detail) {
+    alert('該關主尚未解鎖心得卡！');
+    return;
+  }
+
+  const player = InventoryManager.getPlayerData();
+  const fwName = (boss.framework && boss.framework.name) || boss.weaknessName || '非暴力溝通';
+
+  let md = `# 🎒 CoachQuest 關主教練心得卡 · 【${boss.name}】\n\n`;
+  md += `- **收攏教練**：${player.avatar} **${player.nickname}**\n`;
+  md += `- **關主身份**：${boss.avatar} ${boss.name} · ${boss.title}\n`;
+  md += `- **突破心法**：${fwName}\n`;
+  md += `- **歷史最高通關分**：**${detail.highestScore} 分**\n`;
+  md += `- **收攏次數**：${detail.captureCount || 1} 次\n`;
+  md += `- **首次收攏時間**：${detail.firstCapturedAt ? new Date(detail.firstCapturedAt).toLocaleDateString() : '歷史存檔'}\n\n`;
+
+  md += `---\n\n`;
+  md += `## ✨ 破心教練金句\n`;
+  md += `> 「${detail.bestCoachQuote || '深刻的同理觸動人心。'}」\n\n`;
+
+  md += `## 🎯 突破防線關鍵復盤\n`;
+  md += `${detail.winningReason || '成功識別了關主的真實需求，引導出自我反思。'}\n\n`;
+
+  md += `## 📊 掌握之五大溝通維度得分\n\n`;
+  const dims = detail.dimensionScores || {};
+  md += `- 深度同理心：**${dims.empathy || 80} 分**\n`;
+  md += `- 有效傾聽：**${dims.listening || 80} 分**\n`;
+  md += `- 提問引導：**${dims.questioning || 75} 分**\n`;
+  md += `- 視角重構：**${dims.reframing || 75} 分**\n`;
+  md += `- 行動激發：**${dims.action_drive || 70} 分**\n\n`;
+
+  md += `---\n*CoachQuest 百寶箱圖鑑 · https://coachquest.coachsunny.workers.dev*\n`;
+
+  downloadMarkdownFile(md, `CoachQuest_心得卡_${boss.name}_${player.nickname}`);
+}
+
+function downloadMarkdownFile(content, baseName) {
+  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const cleanName = baseName.replace(/[^\w\u4e00-\u9fa5]/g, '_');
+  const dateStr = new Date().toISOString().slice(0, 10);
+  a.download = `${cleanName}_${dateStr}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showSystemToast('📥 報告已下載完成！');
+}
+
+// ========================================================
 // 百寶箱圖鑑儀表板 (Treasure Box / Pokédex Modal)
 // ========================================================
 export function openInventoryModal() {
@@ -1470,6 +1615,7 @@ function renderPokedexCards(categoryFilter = 'all') {
 }
 
 function openBossDetailModal(bossId) {
+  state.currentViewingBossId = bossId;
   const boss = getBossById(bossId);
   const detail = InventoryManager.getCaptureDetail(bossId);
   if (!boss || !detail) return;
