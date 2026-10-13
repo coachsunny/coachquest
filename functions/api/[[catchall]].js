@@ -187,6 +187,7 @@ function resolveApiConfig(reqBody, env) {
     provider,
     apiKey,
     model,
+    geminiFallbackKey: geminiEnvKey || (clientKey.startsWith('AIza') ? clientKey : ''),
     hasServerDeepseek: !!deepseekEnvKey,
     hasServerGemini: !!geminiEnvKey
   };
@@ -235,12 +236,15 @@ async function callDeepSeekApi({ apiKey, model, systemPrompt, messages }) {
     model: targetModel,
     messages: formattedMessages,
     temperature: 0.7,
-    max_tokens: 1500
+    max_tokens: 2500
   };
 
   // deepseek-chat 支援 response_format json_object
   if (targetModel === 'deepseek-chat') {
     payload.response_format = { type: 'json_object' };
+  } else if (targetModel === 'deepseek-reasoner') {
+    delete payload.temperature;
+    payload.max_tokens = 4096;
   }
 
   const res = await fetch(endpoint, {
@@ -265,9 +269,13 @@ async function callDeepSeekApi({ apiKey, model, systemPrompt, messages }) {
   }
 
   const data = await res.json();
-  const rawText = data?.choices?.[0]?.message?.content;
+  const choice = data?.choices?.[0]?.message;
+  let rawText = (choice?.content && typeof choice.content === 'string') ? choice.content.trim() : '';
+  if (!rawText && choice?.reasoning_content) {
+    rawText = choice.reasoning_content.trim();
+  }
   if (!rawText) {
-    throw new Error(`DeepSeek API (${targetModel}) 未回傳有效文字內容`);
+    throw new Error(`DeepSeek API (${targetModel}) 回傳文字為空`);
   }
 
   const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
@@ -406,12 +414,42 @@ async function callLlmApi({ config, systemPrompt, messages = [], contents = null
           content: c.parts?.map(p => p.text).join('\n') || ''
         }));
 
-    return await callDeepSeekApi({
-      apiKey,
-      model,
-      systemPrompt,
-      messages: msgs
-    });
+    try {
+      return await callDeepSeekApi({
+        apiKey,
+        model,
+        systemPrompt,
+        messages: msgs
+      });
+    } catch (deepseekErr) {
+      console.warn(`[Dual-Engine Fallback] DeepSeek 呼叫失敗: ${deepseekErr.message}`);
+
+      // 檢查是否有 Gemini 金鑰（伺服器託管或自備）可作備援
+      const geminiKey = config.geminiFallbackKey || '';
+      if (geminiKey) {
+        try {
+          console.warn('[Dual-Engine Fallback] 自動啟動 Gemini 備援引擎接手處理...');
+          const geminiContents = msgs.map(m => ({
+            role: (m.role === 'assistant' || m.role === 'model') ? 'model' : 'user',
+            parts: [{ text: typeof m.content === 'string' ? m.content : '' }]
+          }));
+
+          const fallbackResult = await callGeminiApi({
+            apiKey: geminiKey,
+            model: DEFAULT_GEMINI_MODEL,
+            systemPrompt,
+            contents: geminiContents
+          });
+
+          console.log('[Dual-Engine Fallback] 成功透過 Gemini 引擎無縫接手回應！');
+          return fallbackResult;
+        } catch (geminiErr) {
+          console.error('[Dual-Engine Fallback] Gemini 備援亦失敗:', geminiErr.message);
+        }
+      }
+
+      throw deepseekErr;
+    }
   } else {
     const geminiContents = (contents && contents.length > 0)
       ? contents

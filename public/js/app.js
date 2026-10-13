@@ -915,14 +915,27 @@ async function handleSendMessage(overrideText = null) {
   }
 
   // 3. 單人挑戰 或 多人模式 A（雙人競速）
-  // 防禦：若上一條為未獲回覆的失敗 user 訊息，先移除避免連續堆疊
-  if (state.dialogueHistory.length > 0 && state.dialogueHistory[state.dialogueHistory.length - 1].role === 'user') {
-    state.dialogueHistory.pop();
-  }
+  // 防禦：檢查畫面上是否已存在此條待回覆的 user 泡泡，避免重試時連續堆疊多個重複氣泡
+  const lastBubble = elements.chatMessages?.querySelector('.message-row.user:last-of-type');
+  const isDuplicateBubble = lastBubble && lastBubble.querySelector('.message-bubble')?.textContent === userText && (
+    !elements.chatMessages?.querySelector('.message-row.boss:last-of-type') || 
+    elements.chatMessages?.lastElementChild?.classList.contains('system-notice-bar') ||
+    elements.chatMessages?.lastElementChild === lastBubble
+  );
 
-  const userMsg = { role: 'user', content: userText };
-  state.dialogueHistory.push(userMsg);
-  appendMessageToChat(userMsg);
+  if (!isDuplicateBubble) {
+    if (state.dialogueHistory.length > 0 && state.dialogueHistory[state.dialogueHistory.length - 1].role === 'user') {
+      state.dialogueHistory.pop();
+    }
+    const userMsg = { role: 'user', content: userText };
+    state.dialogueHistory.push(userMsg);
+    appendMessageToChat(userMsg);
+  } else {
+    // 若為重試發送，歷史紀錄確保為該訊息
+    if (state.dialogueHistory.length === 0 || state.dialogueHistory[state.dialogueHistory.length - 1].role !== 'user') {
+      state.dialogueHistory.push({ role: 'user', content: userText });
+    }
+  }
 
   state.isWaitingResponse = true;
   setTypingIndicator(true);
@@ -1082,6 +1095,9 @@ function appendSystemNotice(text) {
 }
 
 function appendErrorRetryNotice(errorMsg, failedText) {
+  // 先清理既有的重試卡片，避免畫面上累積多個重複警示
+  elements.chatMessages?.querySelectorAll('.system-error-retry-bar').forEach(el => el.remove());
+
   const row = document.createElement('div');
   row.className = 'system-notice-bar system-error-retry-bar';
   row.style.background = '#fef2f2';
