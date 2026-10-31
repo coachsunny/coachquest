@@ -47,6 +47,9 @@ export const InventoryManager = {
     if (!data.captures || typeof data.captures !== 'object') {
       data.captures = {};
     }
+    if (!Array.isArray(data.practiceLogs)) {
+      data.practiceLogs = [];
+    }
     if (typeof data.totalExp !== 'number' || isNaN(data.totalExp)) {
       data.totalExp = 0;
     }
@@ -117,8 +120,8 @@ export const InventoryManager = {
     return data;
   },
 
-  // 記錄戰鬥結果並結算百寶箱收攏
-  recordBattleResult(boss, evaluation) {
+  // 記錄戰鬥結果並結算百寶箱收攏與完整對話練習記錄
+  recordBattleResult(boss, evaluation, dialogueHistory = []) {
     const data = this.getPlayerData();
     const score = Number(evaluation.score) || 0;
     const isCaptured = score >= 70;
@@ -128,6 +131,7 @@ export const InventoryManager = {
     data.totalExp = (data.totalExp || 0) + gainedExp;
 
     let isFirstCapture = false;
+    const cleanDialogue = Array.isArray(dialogueHistory) ? JSON.parse(JSON.stringify(dialogueHistory)) : [];
 
     if (isCaptured) {
       const existing = data.captures[boss.id];
@@ -148,8 +152,38 @@ export const InventoryManager = {
         captureCount: (existing ? existing.captureCount : 0) + 1,
         bestCoachQuote: evaluation.bestCoachQuote || (existing ? existing.bestCoachQuote : ''),
         winningReason: evaluation.winningReason || (existing ? existing.winningReason : ''),
-        dimensionScores: evaluation.dimensions || (existing ? existing.dimensionScores : {})
+        dimensionScores: evaluation.dimensions || (existing ? existing.dimensionScores : {}),
+        dialogueHistory: cleanDialogue.length > 0 ? cleanDialogue : (existing?.dialogueHistory || []),
+        lastEvaluation: evaluation
       };
+    }
+
+    // 永久儲存至對話練習紀錄流水帳 (保留最近 30 筆，避免 localStorage 超限)
+    if (!Array.isArray(data.practiceLogs)) {
+      data.practiceLogs = [];
+    }
+
+    const logEntry = {
+      id: 'log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      bossId: boss.id,
+      bossName: boss.name,
+      bossAvatar: boss.avatar,
+      bossTitle: boss.title,
+      category: boss.category,
+      date: new Date().toISOString(),
+      score: score,
+      isCaptured: isCaptured,
+      turns: cleanDialogue.filter(m => m.role === 'user').length,
+      bestCoachQuote: evaluation.bestCoachQuote || '',
+      winningReason: evaluation.winningReason || '',
+      dimensionScores: evaluation.dimensions || {},
+      advice: evaluation.advice || '',
+      dialogueHistory: cleanDialogue
+    };
+
+    data.practiceLogs.unshift(logEntry);
+    if (data.practiceLogs.length > 30) {
+      data.practiceLogs = data.practiceLogs.slice(0, 30);
     }
 
     this.savePlayerData(data);
@@ -162,8 +196,30 @@ export const InventoryManager = {
       gainedExp,
       totalExp: data.totalExp,
       rank,
-      totalCapturedCount: Object.keys(data.captures).length
+      totalCapturedCount: Object.keys(data.captures).length,
+      logId: logEntry.id
     };
+  },
+
+  // 取得歷次對話練習紀錄
+  getPracticeLogs() {
+    const data = this.getPlayerData();
+    return Array.isArray(data.practiceLogs) ? data.practiceLogs : [];
+  },
+
+  // 根據 ID 取得單筆對話練習紀錄
+  getPracticeLogById(id) {
+    const logs = this.getPracticeLogs();
+    return logs.find(l => l.id === id) || null;
+  },
+
+  // 刪除單筆對話練習紀錄
+  deletePracticeLog(id) {
+    const data = this.getPlayerData();
+    if (Array.isArray(data.practiceLogs)) {
+      data.practiceLogs = data.practiceLogs.filter(l => l.id !== id);
+      this.savePlayerData(data);
+    }
   },
 
   // 判斷關主是否已被收攏

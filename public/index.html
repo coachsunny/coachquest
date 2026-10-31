@@ -208,6 +208,9 @@
                 <input type="checkbox" id="toggleThought" checked>
                 <span>💭 關主心聲</span>
               </label>
+              <button class="tool-btn" id="btnDownloadChatLive" title="隨時下載當前對話練習的逐字稿細節記錄" style="font-size:0.8rem; padding: 0.35rem 0.65rem;">
+                📥 下載對話
+              </button>
             </div>
 
             <div class="toolbar-right">
@@ -338,19 +341,38 @@
 
   <!-- ================= 彈窗 2: 關主心得卡 (Boss Card Detail Modal) ================= -->
   <div class="modal-overlay hidden" id="modalBossDetail">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-large">
       <div class="modal-header">
-        <h3>📜 關主教練心得卡</h3>
+        <h3>📜 關主教練心得卡與對話實錄</h3>
         <button class="modal-close" data-close-modal>&times;</button>
       </div>
-      <div class="modal-body" id="bossDetailContent">
+      <div class="modal-body" id="bossDetailContent" style="max-height: 75vh; overflow-y: auto;">
         <!-- 動態渲染心得卡詳細內容 -->
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
         <button class="btn btn-outline btn-sm" id="btnDownloadBossCardReport" style="border-color: #4f46e5; color: #4f46e5; font-weight: 700;">
-          📥 下載此心得卡 (.md)
+          📥 下載完整復盤與對話實錄 (.md)
         </button>
         <button class="btn btn-primary btn-sm" data-close-modal>確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 2B: 對話練習紀錄詳情 (Practice Log Detail Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalPracticeLogDetail">
+    <div class="modal-dialog modal-large">
+      <div class="modal-header">
+        <h3>📋 教練對話練習詳細紀錄</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body" id="practiceLogDetailContent" style="max-height: 75vh; overflow-y: auto;">
+        <!-- 動態渲染對話練習逐字稿與評審 -->
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-outline btn-sm" id="btnDownloadPracticeLogReport" style="border-color: #4f46e5; color: #4f46e5; font-weight: 700;">
+          📥 下載本場練習報告 (.md)
+        </button>
+        <button class="btn btn-primary btn-sm" data-close-modal>關閉</button>
       </div>
     </div>
   </div>

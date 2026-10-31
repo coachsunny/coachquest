@@ -22,6 +22,7 @@ const state = {
   showInnerThoughts: true,
   currentEvaluation: null,
   currentViewingBossId: null,
+  currentViewingLogId: null,
 
   // 多人對戰狀態
   isMultiplayer: false,
@@ -74,6 +75,7 @@ function initElements() {
     btnHint: document.getElementById('btnHint'),
     btnCapture: document.getElementById('btnCapture'),
     btnRetreat: document.getElementById('btnRetreat'),
+    btnDownloadChatLive: document.getElementById('btnDownloadChatLive'),
     toggleThought: document.getElementById('toggleThought'),
 
     // 多人外掛對決元素
@@ -115,6 +117,9 @@ function initElements() {
     modalLeaderboard: document.getElementById('modalLeaderboard'),
     modalSettings: document.getElementById('modalSettings'),
     modalBossDetail: document.getElementById('modalBossDetail'),
+    modalPracticeLogDetail: document.getElementById('modalPracticeLogDetail'),
+    practiceLogDetailContent: document.getElementById('practiceLogDetailContent'),
+    btnDownloadPracticeLogReport: document.getElementById('btnDownloadPracticeLogReport'),
     modalMultiplayer: document.getElementById('modalMultiplayer'),
 
     // Multiplayer Modal Elements
@@ -245,6 +250,7 @@ function bindEvents() {
   elements.btnHint?.addEventListener('click', () => handleRequestHint());
   elements.btnCapture?.addEventListener('click', () => handleTriggerEvaluation());
   elements.btnRetreat?.addEventListener('click', () => handleRetreat());
+  elements.btnDownloadChatLive?.addEventListener('click', () => handleDownloadLiveChat());
   elements.toggleThought?.addEventListener('change', (e) => {
     state.showInnerThoughts = e.target.checked;
     document.querySelectorAll('.inner-thought-card').forEach(el => {
@@ -278,6 +284,7 @@ function bindEvents() {
   elements.btnEvalSubmitBoard?.addEventListener('click', () => handleSubmitScoreToLeaderboard());
   elements.btnEvalDownloadReport?.addEventListener('click', () => handleDownloadReport());
   elements.btnDownloadBossCardReport?.addEventListener('click', () => handleDownloadBossCardReport());
+  elements.btnDownloadPracticeLogReport?.addEventListener('click', () => handleDownloadPracticeLogReport());
 
   // 設定儲存
   elements.btnSaveSettings?.addEventListener('click', () => handleSaveSettings());
@@ -1264,7 +1271,7 @@ function renderEvaluationView(evalData) {
   const score = Number(evalData.score) || 0;
   const isCaptured = score >= 70;
 
-  const battleResult = InventoryManager.recordBattleResult(boss, evalData);
+  const battleResult = InventoryManager.recordBattleResult(boss, evalData, state.dialogueHistory);
 
   switchView('evaluation');
 
@@ -1470,7 +1477,7 @@ function handleDownloadBossCardReport() {
   const player = InventoryManager.getPlayerData();
   const fwName = (boss.framework && boss.framework.name) || boss.weaknessName || '非暴力溝通';
 
-  let md = `# 🎒 CoachQuest 關主教練心得卡 · 【${boss.name}】\n\n`;
+  let md = `# 🎒 CoachQuest 關主教練心得卡與對話實錄 · 【${boss.name}】\n\n`;
   md += `- **收攏教練**：${player.avatar} **${player.nickname}**\n`;
   md += `- **關主身份**：${boss.avatar} ${boss.name} · ${boss.title}\n`;
   md += `- **突破心法**：${fwName}\n`;
@@ -1493,9 +1500,143 @@ function handleDownloadBossCardReport() {
   md += `- 視角重構：**${dims.reframing || 75} 分**\n`;
   md += `- 行動激發：**${dims.action_drive || 70} 分**\n\n`;
 
+  if (detail.dialogueHistory && detail.dialogueHistory.length > 0) {
+    md += `---\n\n## 📜 完整破心對決對話實錄 (Dialogue Transcript)\n\n`;
+    let roundIndex = 1;
+    for (let i = 0; i < detail.dialogueHistory.length; i++) {
+      const msg = detail.dialogueHistory[i];
+      if (msg.role === 'user') {
+        md += `### 🔹 回合 ${roundIndex} · 教練提問\n`;
+        md += `**${player.avatar} ${player.nickname}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+        roundIndex++;
+      } else {
+        md += `**${boss.avatar} ${boss.name}**：\n${msg.content}\n\n`;
+        if (msg.innerThought) {
+          md += `*💭 關主潛意識心聲：${msg.innerThought}*\n\n`;
+        }
+      }
+    }
+  }
+
   md += `---\n*CoachQuest 百寶箱圖鑑 · https://coachquest.coachsunny.workers.dev*\n`;
 
-  downloadMarkdownFile(md, `CoachQuest_心得卡_${boss.name}_${player.nickname}`);
+  downloadMarkdownFile(md, `CoachQuest_心得卡與對話實錄_${boss.name}_${player.nickname}`);
+}
+
+// 即時下載對決中的對話實錄 (.md)
+function handleDownloadLiveChat() {
+  if (!state.selectedBoss || !state.dialogueHistory || state.dialogueHistory.length === 0) {
+    alert('目前尚無對話記錄，請先與關主進行對話交流！');
+    return;
+  }
+
+  const boss = state.selectedBoss;
+  const player = InventoryManager.getPlayerData();
+  const rank = InventoryManager.getPlayerRank(player.totalExp);
+  const nowStr = new Date().toLocaleString('zh-TW', { hour12: false });
+  const fwName = (boss.framework && boss.framework.name) || boss.weaknessName || '非暴力溝通';
+
+  let md = `# 💬 CoachQuest 教練實戰即時對話練習實錄\n\n`;
+  md += `> **記錄時間**：${nowStr}\n`;
+  md += `> **挑戰模式**：${state.isMultiplayer ? '👥 多人連線約戰' : '⚔️ 單人道館挑戰'}\n`;
+  md += `> **教練學員**：${player.avatar} **${player.nickname}**（Lv.${rank.level} ${rank.badge} ${rank.title}）\n`;
+  md += `> **對決關主**：${boss.avatar} **${boss.name}**（${boss.title}）\n`;
+  md += `> **情境設定**：${boss.scenario}\n`;
+  md += `> **攻心架構**：${fwName}\n`;
+  md += `> **當前心防生命**：${state.defenseHp}%\n`;
+  md += `> **進行回合數**：第 ${state.turnCount} 回合（共 ${state.dialogueHistory.length} 則對話）\n\n`;
+  md += `---\n\n`;
+
+  md += `## 📜 完整對決即時對話實錄 (Live Transcript)\n\n`;
+  let roundIndex = 1;
+  for (let i = 0; i < state.dialogueHistory.length; i++) {
+    const msg = state.dialogueHistory[i];
+    if (msg.role === 'user') {
+      md += `### 🔹 回合 ${roundIndex} · 教練提問\n`;
+      md += `**${player.avatar} ${player.nickname}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+      roundIndex++;
+    } else {
+      md += `**${boss.avatar} ${boss.name}**：\n${msg.content}\n\n`;
+      if (msg.innerThought) {
+        md += `*💭 關主潛意識心聲：${msg.innerThought}*\n\n`;
+      }
+    }
+  }
+
+  md += `---\n*CoachQuest (教練大冒險) · https://coachquest.coachsunny.workers.dev*\n`;
+  downloadMarkdownFile(md, `CoachQuest_即時對話_${boss.name}_${player.nickname}`);
+}
+
+// 下載任一次練習紀錄報告 (.md)
+function handleDownloadPracticeLogReport() {
+  const logId = state.currentViewingLogId;
+  if (!logId) return;
+  const log = InventoryManager.getPracticeLogById(logId);
+  if (!log) {
+    alert('找不到該場練習紀錄！');
+    return;
+  }
+
+  const player = InventoryManager.getPlayerData();
+  const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
+  const isCaptured = log.isCaptured;
+
+  let md = `# 🎮 CoachQuest 教練實戰對話練習復盤報告\n\n`;
+  md += `> **練習時間**：${dateStr}\n`;
+  md += `> **關卡對象**：${log.bossAvatar} **${log.bossName}**（${log.bossTitle}）\n`;
+  md += `> **教練學員**：${player.avatar} **${player.nickname}**\n`;
+  md += `> **綜合評分**：**${log.score} 分**（${isCaptured ? '🔴 成功突破收攏' : '💨 心防尚未突破'}）\n`;
+  md += `> **互動回合**：共 ${log.turns || 1} 回合\n\n`;
+  md += `---\n\n`;
+
+  if (log.bestCoachQuote) {
+    md += `## ✨ 精彩教練金句\n`;
+    md += `> 「${log.bestCoachQuote}」\n\n`;
+  }
+
+  if (log.winningReason) {
+    md += `## 🎯 突破防線關鍵復盤\n`;
+    md += `${log.winningReason}\n\n`;
+  }
+
+  if (log.advice) {
+    md += `## 💡 專家指導與調整建議\n`;
+    md += `${log.advice}\n\n`;
+  }
+
+  if (log.dimensionScores && Object.keys(log.dimensionScores).length > 0) {
+    const dims = log.dimensionScores;
+    md += `---\n\n## 📊 ICF 教練核心溝通能力五維度分析\n\n`;
+    md += `| 評估維度 | 得分 |\n| :--- | :--- |\n`;
+    md += `| 深度同理心 | **${dims.empathy || 75} 分** |\n`;
+    md += `| 有效傾聽 | **${dims.listening || 75} 分** |\n`;
+    md += `| 提問引導 | **${dims.questioning || 70} 分** |\n`;
+    md += `| 視角重構 | **${dims.reframing || 70} 分** |\n`;
+    md += `| 行動激發 | **${dims.action_drive || 65} 分** |\n\n`;
+  }
+
+  md += `---\n\n## 📜 完整對話練習逐字稿實錄 (Dialogue Transcript)\n\n`;
+  if (log.dialogueHistory && log.dialogueHistory.length > 0) {
+    let roundIndex = 1;
+    for (let i = 0; i < log.dialogueHistory.length; i++) {
+      const msg = log.dialogueHistory[i];
+      if (msg.role === 'user') {
+        md += `### 🔹 回合 ${roundIndex} · 教練提問\n`;
+        md += `**${player.avatar} ${player.nickname}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+        roundIndex++;
+      } else {
+        md += `**${log.bossAvatar} ${log.bossName}**：\n${msg.content}\n\n`;
+        if (msg.innerThought) {
+          md += `*💭 關主潛意識心聲：${msg.innerThought}*\n\n`;
+        }
+      }
+    }
+  } else {
+    md += `*（無對話歷史記錄）*\n\n`;
+  }
+
+  md += `---\n*CoachQuest (教練大冒險) · https://coachquest.coachsunny.workers.dev*\n`;
+  downloadMarkdownFile(md, `CoachQuest_練習復盤_${log.bossName}_${player.nickname}`);
 }
 
 function downloadMarkdownFile(content, baseName) {
@@ -1518,6 +1659,7 @@ function downloadMarkdownFile(content, baseName) {
 // ========================================================
 export function openInventoryModal() {
   const stats = InventoryManager.getStatistics(BOSSES);
+  const practiceLogs = InventoryManager.getPracticeLogs();
 
   if (elements.invTotalCaptured) elements.invTotalCaptured.textContent = `${stats.totalCaptured} / ${stats.totalAvailable}`;
   if (elements.invCompletionRate) elements.invCompletionRate.textContent = `${stats.completionRate}%`;
@@ -1528,7 +1670,8 @@ export function openInventoryModal() {
   if (elements.pokedexTabs) {
     const tabs = [
       { id: 'all', name: '全部關主' },
-      ...CATEGORIES.map(c => ({ id: c.id, name: `${c.icon} ${c.name}` }))
+      ...CATEGORIES.map(c => ({ id: c.id, name: `${c.icon} ${c.name}` })),
+      { id: 'practice_logs', name: `📋 對話練習紀錄 (${practiceLogs.length})` }
     ];
 
     elements.pokedexTabs.innerHTML = tabs.map(t => `
@@ -1542,7 +1685,11 @@ export function openInventoryModal() {
         elements.pokedexTabs.querySelectorAll('.pokedex-tab-btn').forEach(b => b.classList.remove('active'));
         e.currentTarget.classList.add('active');
         const cat = e.currentTarget.getAttribute('data-cat');
-        renderPokedexCards(cat);
+        if (cat === 'practice_logs') {
+          renderPracticeLogs();
+        } else {
+          renderPokedexCards(cat);
+        }
       });
     });
   }
@@ -1614,14 +1761,236 @@ function renderPokedexCards(categoryFilter = 'all') {
   });
 }
 
+// 渲染歷次對話練習流水帳紀錄
+function renderPracticeLogs() {
+  if (!elements.pokedexGrid) return;
+
+  const logs = InventoryManager.getPracticeLogs();
+
+  if (logs.length === 0) {
+    elements.pokedexGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; padding: 3rem 1.5rem; text-align: center; color: #64748b;">
+        <div style="font-size: 3rem; margin-bottom: 0.8rem;">📝</div>
+        <div style="font-size: 1.1rem; font-weight: 700; color: #334155; margin-bottom: 0.4rem;">尚無對話練習紀錄</div>
+        <div style="font-size: 0.9rem;">選擇任一位關主開始實戰對話，完成後對話細節與分析將自動保留於此！</div>
+      </div>
+    `;
+    return;
+  }
+
+  elements.pokedexGrid.innerHTML = `
+    <div class="practice-log-list" style="grid-column: 1 / -1;">
+      ${logs.map(log => {
+        const dateStr = new Date(log.date).toLocaleString('zh-TW', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        const isCaptured = log.isCaptured;
+        const scoreClass = isCaptured ? 'win' : 'retry';
+        const scoreBadge = isCaptured ? '🔴 成功收攏' : '💨 未收攏';
+        const previewQuote = log.bestCoachQuote ? `「${escapeHtml(log.bestCoachQuote)}」` : (log.winningReason ? escapeHtml(log.winningReason) : '對話練習已完成');
+
+        return `
+          <div class="practice-log-card" data-log-id="${log.id}">
+            <div class="practice-log-header">
+              <div class="practice-log-boss">
+                <div class="practice-log-avatar">${log.bossAvatar || '👤'}</div>
+                <div>
+                  <div class="practice-log-name">${escapeHtml(log.bossName || '關主')} · ${escapeHtml(log.bossTitle || '')}</div>
+                  <div class="practice-log-sub">${dateStr} · 共 ${log.turns || 1} 回合互動</div>
+                </div>
+              </div>
+              <div class="practice-log-meta">
+                <span class="practice-score-chip ${scoreClass}">${scoreBadge} ${log.score}分</span>
+              </div>
+            </div>
+            <div class="practice-log-quote">
+              ${previewQuote}
+            </div>
+            <div class="practice-log-actions">
+              <button class="btn btn-outline btn-sm btn-view-log" data-log-id="${log.id}">
+                👁️ 查閱完整對話細節
+              </button>
+              <button class="btn btn-primary btn-sm btn-download-log" data-log-id="${log.id}">
+                📥 下載本場報告 (.md)
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(elements.pokedexGrid);
+  }
+
+  // 綁定查閱事件
+  elements.pokedexGrid.querySelectorAll('.btn-view-log').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const logId = e.currentTarget.getAttribute('data-log-id');
+      openPracticeLogModal(logId);
+    });
+  });
+
+  // 綁定下載事件
+  elements.pokedexGrid.querySelectorAll('.btn-download-log').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const logId = e.currentTarget.getAttribute('data-log-id');
+      state.currentViewingLogId = logId;
+      handleDownloadPracticeLogReport();
+    });
+  });
+}
+
+// 彈窗查閱單次對話練習詳細紀錄與完整對話逐字稿
+function openPracticeLogModal(logId) {
+  state.currentViewingLogId = logId;
+  const log = InventoryManager.getPracticeLogById(logId);
+  if (!log) {
+    showSystemToast('找不到該筆對話紀錄');
+    return;
+  }
+
+  const player = InventoryManager.getPlayerData();
+  const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
+  const isCaptured = log.isCaptured;
+  const dims = log.dimensionScores || {};
+
+  let dialogueHtml = '';
+  if (log.dialogueHistory && log.dialogueHistory.length > 0) {
+    let roundIndex = 1;
+    dialogueHtml = log.dialogueHistory.map(msg => {
+      if (msg.role === 'user') {
+        const turnHtml = `
+          <div class="modal-chat-turn user-turn">
+            <div class="modal-chat-role">${player.avatar} ${player.nickname}（第 ${roundIndex} 回合）</div>
+            <div class="modal-chat-text">${escapeHtml(msg.content)}</div>
+          </div>
+        `;
+        roundIndex++;
+        return turnHtml;
+      } else {
+        return `
+          <div class="modal-chat-turn boss-turn">
+            <div class="modal-chat-role">${log.bossAvatar || '👤'} ${escapeHtml(log.bossName || '關主')}</div>
+            <div class="modal-chat-text">${escapeHtml(msg.content)}</div>
+            ${msg.innerThought ? `<div class="modal-chat-thought">💭 關主心聲：${escapeHtml(msg.innerThought)}</div>` : ''}
+          </div>
+        `;
+      }
+    }).join('');
+  } else {
+    dialogueHtml = '<div style="color: #94a3b8; font-style: italic; padding: 1rem;">無逐字稿記錄</div>';
+  }
+
+  if (elements.practiceLogDetailContent) {
+    elements.practiceLogDetailContent.innerHTML = `
+      <div class="treasure-card-unlock">
+        <div class="card-hero-row">
+          <div class="card-avatar">${log.bossAvatar || '👤'}</div>
+          <div>
+            <h3>${escapeHtml(log.bossName || '關主')} · ${escapeHtml(log.bossTitle || '')}</h3>
+            <p class="card-sub">
+              練習時間：${dateStr} | 評分：<strong>${log.score} 分</strong> 
+              (${isCaptured ? '🔴 成功收攏' : '💨 心防尚未突破'})
+            </p>
+          </div>
+        </div>
+
+        ${log.bestCoachQuote ? `
+          <div class="card-section">
+            <h4>✨ 你的破心教練金句</h4>
+            <blockquote class="card-quote">「${escapeHtml(log.bestCoachQuote)}」</blockquote>
+          </div>
+        ` : ''}
+
+        ${log.winningReason ? `
+          <div class="card-section">
+            <h4>🎯 突破防線關鍵復盤</h4>
+            <p>${escapeHtml(log.winningReason)}</p>
+          </div>
+        ` : ''}
+
+        ${log.advice ? `
+          <div class="card-section">
+            <h4>💡 導師建議與優化方向</h4>
+            <p>${escapeHtml(log.advice)}</p>
+          </div>
+        ` : ''}
+
+        <div class="card-section">
+          <h4>📊 ICF 五大核心維度分析</h4>
+          <div class="dimension-grid">
+            <div class="dim-item"><span>深度同理：${dims.empathy || 75}分</span></div>
+            <div class="dim-item"><span>有效傾聽：${dims.listening || 75}分</span></div>
+            <div class="dim-item"><span>提問引導：${dims.questioning || 70}分</span></div>
+            <div class="dim-item"><span>視角重構：${dims.reframing || 70}分</span></div>
+            <div class="dim-item"><span>行動激發：${dims.action_drive || 65}分</span></div>
+          </div>
+        </div>
+
+        <div class="card-section">
+          <h4>📜 完整對話練習實錄逐字稿 (共 ${log.turns || 1} 回合)</h4>
+          <div class="modal-chat-transcript">
+            ${dialogueHtml}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  elements.modalPracticeLogDetail?.classList.remove('hidden');
+  if (LangManager.getLang() === 'zh-CN' && elements.modalPracticeLogDetail) {
+    LangManager.translateDOM(elements.modalPracticeLogDetail);
+  }
+}
+
 function openBossDetailModal(bossId) {
   state.currentViewingBossId = bossId;
   const boss = getBossById(bossId);
   const detail = InventoryManager.getCaptureDetail(bossId);
   if (!boss || !detail) return;
 
+  const player = InventoryManager.getPlayerData();
   const contentEl = document.getElementById('bossDetailContent');
   const fwName = (boss.framework && boss.framework.name) || boss.weaknessName || '非暴力溝通';
+
+  let transcriptHtml = '';
+  if (detail.dialogueHistory && detail.dialogueHistory.length > 0) {
+    let roundIndex = 1;
+    transcriptHtml = `
+      <div class="card-section">
+        <h4>📜 破心收攏對話實錄 (共 ${detail.dialogueHistory.filter(m => m.role === 'user').length} 回合)</h4>
+        <div class="modal-chat-transcript" style="max-height: 320px; overflow-y: auto; padding-right: 0.5rem;">
+          ${detail.dialogueHistory.map(msg => {
+            if (msg.role === 'user') {
+              const html = `
+                <div class="modal-chat-turn user-turn">
+                  <div class="modal-chat-role">${player.avatar} ${player.nickname}（第 ${roundIndex} 回合）</div>
+                  <div class="modal-chat-text">${escapeHtml(msg.content)}</div>
+                </div>
+              `;
+              roundIndex++;
+              return html;
+            } else {
+              return `
+                <div class="modal-chat-turn boss-turn">
+                  <div class="modal-chat-role">${boss.avatar} ${escapeHtml(boss.name)}</div>
+                  <div class="modal-chat-text">${escapeHtml(msg.content)}</div>
+                  ${msg.innerThought ? `<div class="modal-chat-thought">💭 關主心聲：${escapeHtml(msg.innerThought)}</div>` : ''}
+                </div>
+              `;
+            }
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
 
   if (contentEl) {
     contentEl.innerHTML = `
@@ -1654,6 +2023,8 @@ function openBossDetailModal(bossId) {
             <div class="dim-item"><span>行動激發：${detail.dimensionScores?.action_drive || 70}分</span></div>
           </div>
         </div>
+
+        ${transcriptHtml}
       </div>
     `;
   }
