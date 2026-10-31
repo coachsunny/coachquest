@@ -9,6 +9,15 @@ export default {
       return onRequest({ request, env, ctx });
     }
 
+    // /admin 與 /admin/ 捷徑導向後台頁面 admin.html
+    if (url.pathname === '/admin' || url.pathname === '/admin/') {
+      const adminUrl = new URL(request.url);
+      adminUrl.pathname = '/admin.html';
+      return env && env.ASSETS 
+        ? env.ASSETS.fetch(new Request(adminUrl, request))
+        : new Response('Admin Not Found', { status: 404 });
+    }
+
     // 靜態資源由 Cloudflare Assets 提供
     if (env && env.ASSETS) {
       return env.ASSETS.fetch(request);

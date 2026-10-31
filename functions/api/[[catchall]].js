@@ -36,6 +36,59 @@ let memoryLeaderboard = [
 // 多人約戰房間快取池（以 RoomId 為 Key）
 const activeRooms = new Map();
 
+// 學員實戰對話練習紀錄儲存庫 (記憶體備援，支援 Cloudflare KV 持久化)
+let memoryPracticeLogs = [];
+const adminSessions = new Map(); // token -> { username, createdAt, expiresAt }
+
+function getAdminCredentials(env) {
+  const username = (env && env.ADMIN_USERNAME) ? String(env.ADMIN_USERNAME).trim() : 'admin';
+  const password = (env && env.ADMIN_PASSWORD) ? String(env.ADMIN_PASSWORD).trim() : 'coachquest2026';
+  return { username, password };
+}
+
+function verifyAdminSession(request, env) {
+  const authHeader = request.headers.get('Authorization') || request.headers.get('x-admin-token') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+
+  const session = adminSessions.get(token);
+  if (session && session.expiresAt > Date.now()) {
+    return session;
+  }
+
+  // 支援環境變數 ADMIN_SECRET 作為萬用管理金鑰
+  if (env && env.ADMIN_SECRET && token === String(env.ADMIN_SECRET).trim()) {
+    return { username: 'admin', token };
+  }
+
+  return null;
+}
+
+async function getStoredPracticeLogs(env) {
+  if (env && env.COACHQUEST_KV) {
+    try {
+      const kvData = await env.COACHQUEST_KV.get('practice_logs_all', { type: 'json' });
+      if (Array.isArray(kvData)) {
+        return kvData;
+      }
+    } catch (e) {
+      console.warn('KV 讀取 practice_logs 失敗，改用記憶體資料:', e);
+    }
+  }
+  return memoryPracticeLogs;
+}
+
+async function saveStoredPracticeLogs(env, logs) {
+  memoryPracticeLogs = logs;
+  if (env && env.COACHQUEST_KV) {
+    try {
+      await env.COACHQUEST_KV.put('practice_logs_all', JSON.stringify(logs));
+    } catch (e) {
+      console.warn('KV 儲存 practice_logs 失敗:', e);
+    }
+  }
+}
+
 // 定期清理逾時房間（超過 3 小時未活動）
 function cleanupStaleRooms() {
   const now = Date.now();
@@ -1065,6 +1118,216 @@ export async function handleApiRequest(request, env) {
         ok: true,
         leaderboard: memoryLeaderboard
       }), { headers: corsHeaders });
+    }
+
+    // 13. POST /api/practice-logs/submit (學員端提交實戰對話紀錄至後台)
+    if (pathname === '/practice-logs/submit' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const studentName = (body.studentName || '冒險者教練').trim().substring(0, 30);
+      const studentAvatar = body.studentAvatar || '🧙‍♂️';
+      const bossId = body.bossId || 'boss_unknown';
+      const bossName = body.bossName || '神秘關主';
+      const bossAvatar = body.bossAvatar || '👤';
+      const bossTitle = body.bossTitle || '';
+      const category = body.category || 'general';
+      const score = Number(body.score) || 0;
+      const isCaptured = typeof body.isCaptured === 'boolean' ? body.isCaptured : score >= 70;
+      const turns = Number(body.turns) || 0;
+      const bestCoachQuote = body.bestCoachQuote || '';
+      const winningReason = body.winningReason || '';
+      const advice = body.advice || '';
+      const dimensions = body.dimensions || {};
+      const dialogueHistory = Array.isArray(body.dialogueHistory) ? body.dialogueHistory : [];
+
+      const logEntry = {
+        id: body.id || ('log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
+        studentName,
+        studentAvatar,
+        bossId,
+        bossName,
+        bossAvatar,
+        bossTitle,
+        category,
+        score,
+        isCaptured,
+        turns,
+        bestCoachQuote,
+        winningReason,
+        advice,
+        dimensions,
+        dialogueHistory,
+        submittedAt: new Date().toISOString(),
+        clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
+      };
+
+      const logs = await getStoredPracticeLogs(env);
+      const existingIdx = logs.findIndex(l => l.id === logEntry.id);
+      if (existingIdx >= 0) {
+        logs[existingIdx] = logEntry;
+      } else {
+        logs.unshift(logEntry);
+      }
+
+      if (logs.length > 500) {
+        logs.length = 500;
+      }
+
+      await saveStoredPracticeLogs(env, logs);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        message: '實戰對話紀錄已成功儲存至後台！',
+        logId: logEntry.id
+      }), { headers: corsHeaders });
+    }
+
+    // 14. POST /api/admin/login (管理員登入驗證)
+    if (pathname === '/admin/login' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const inputUser = (body.username || '').trim();
+      const inputPass = (body.password || '').trim();
+      const creds = getAdminCredentials(env);
+
+      if (inputUser === creds.username && inputPass === creds.password) {
+        const token = 'cq_adm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 12);
+        adminSessions.set(token, {
+          username: creds.username,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + 7 * 24 * 3600 * 1000 // 7 天有效
+        });
+
+        return new Response(JSON.stringify({
+          ok: true,
+          token,
+          username: creds.username
+        }), { headers: corsHeaders });
+      } else {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: '管理員帳號或密碼錯誤！'
+        }), { status: 401, headers: corsHeaders });
+      }
+    }
+
+    // 15. GET /api/admin/verify (檢查 Session 有效性)
+    if (pathname === '/admin/verify' && request.method === 'GET') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權或登入已過期' }), {
+          status: 401,
+          headers: corsHeaders
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, username: session.username }), { headers: corsHeaders });
+    }
+
+    // 16. GET /api/admin/practice-logs (管理員調閱所有學員對話紀錄)
+    if (pathname === '/admin/practice-logs' && request.method === 'GET') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
+          status: 401,
+          headers: corsHeaders
+        });
+      }
+
+      const logs = await getStoredPracticeLogs(env);
+      const search = (url.searchParams.get('search') || '').toLowerCase().trim();
+      const boss = (url.searchParams.get('boss') || '').trim();
+      const captured = (url.searchParams.get('captured') || 'all').trim();
+
+      let filtered = logs;
+      if (search) {
+        filtered = filtered.filter(l => 
+          (l.studentName && l.studentName.toLowerCase().includes(search)) ||
+          (l.bossName && l.bossName.toLowerCase().includes(search)) ||
+          (l.bestCoachQuote && l.bestCoachQuote.toLowerCase().includes(search))
+        );
+      }
+      if (boss && boss !== 'all') {
+        filtered = filtered.filter(l => l.bossId === boss || (l.bossName && l.bossName.includes(boss)));
+      }
+      if (captured === 'true') {
+        filtered = filtered.filter(l => l.isCaptured === true);
+      } else if (captured === 'false') {
+        filtered = filtered.filter(l => l.isCaptured === false);
+      }
+
+      const totalCount = logs.length;
+      const uniqueStudents = new Set(logs.map(l => l.studentName)).size;
+      const capturedCount = logs.filter(l => l.isCaptured).length;
+      const avgScore = totalCount > 0 
+        ? Math.round(logs.reduce((sum, l) => sum + (l.score || 0), 0) / totalCount) 
+        : 0;
+
+      return new Response(JSON.stringify({
+        ok: true,
+        stats: {
+          totalCount,
+          uniqueStudents,
+          capturedCount,
+          capturedRate: totalCount > 0 ? Math.round((capturedCount / totalCount) * 100) : 0,
+          avgScore
+        },
+        logs: filtered
+      }), { headers: corsHeaders });
+    }
+
+    // 17. GET /api/admin/practice-logs/detail (調閱單筆完整對話與逐字稿)
+    if (pathname === '/admin/practice-logs/detail' && request.method === 'GET') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
+          status: 401,
+          headers: corsHeaders
+        });
+      }
+
+      const logId = url.searchParams.get('id');
+      const logs = await getStoredPracticeLogs(env);
+      const log = logs.find(l => l.id === logId);
+
+      if (!log) {
+        return new Response(JSON.stringify({ ok: false, error: '找不到該筆學員練習紀錄' }), {
+          status: 404,
+          headers: corsHeaders
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true, log }), { headers: corsHeaders });
+    }
+
+    // 18. POST /api/admin/practice-logs/delete (管理員刪除單筆紀錄)
+    if (pathname === '/admin/practice-logs/delete' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
+          status: 401,
+          headers: corsHeaders
+        });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const logId = body.id;
+      let logs = await getStoredPracticeLogs(env);
+      logs = logs.filter(l => l.id !== logId);
+      await saveStoredPracticeLogs(env, logs);
+
+      return new Response(JSON.stringify({ ok: true, message: '紀錄已成功刪除' }), { headers: corsHeaders });
+    }
+
+    // 19. POST /api/admin/practice-logs/clear (管理員清空所有紀錄)
+    if (pathname === '/admin/practice-logs/clear' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
+          status: 401,
+          headers: corsHeaders
+        });
+      }
+
+      await saveStoredPracticeLogs(env, []);
+      return new Response(JSON.stringify({ ok: true, message: '已清空所有練習紀錄' }), { headers: corsHeaders });
     }
 
     return new Response(JSON.stringify({ ok: false, error: `無效的 API 端點: ${pathname}` }), {

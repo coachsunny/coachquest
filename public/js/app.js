@@ -120,6 +120,7 @@ function initElements() {
     modalPracticeLogDetail: document.getElementById('modalPracticeLogDetail'),
     practiceLogDetailContent: document.getElementById('practiceLogDetailContent'),
     btnDownloadPracticeLogReport: document.getElementById('btnDownloadPracticeLogReport'),
+    btnCopyPracticeLogText: document.getElementById('btnCopyPracticeLogText'),
     modalMultiplayer: document.getElementById('modalMultiplayer'),
 
     // Multiplayer Modal Elements
@@ -285,6 +286,7 @@ function bindEvents() {
   elements.btnEvalDownloadReport?.addEventListener('click', () => handleDownloadReport());
   elements.btnDownloadBossCardReport?.addEventListener('click', () => handleDownloadBossCardReport());
   elements.btnDownloadPracticeLogReport?.addEventListener('click', () => handleDownloadPracticeLogReport());
+  elements.btnCopyPracticeLogText?.addEventListener('click', () => handleCopyPracticeLogText());
 
   // 設定儲存
   elements.btnSaveSettings?.addEventListener('click', () => handleSaveSettings());
@@ -1272,6 +1274,8 @@ function renderEvaluationView(evalData) {
   const isCaptured = score >= 70;
 
   const battleResult = InventoryManager.recordBattleResult(boss, evalData, state.dialogueHistory);
+  // 自動非同步上傳實戰練習對話與 ICF 分析至後台雲端
+  syncPracticeLogToBackend(boss, evalData, state.dialogueHistory, battleResult.logId);
 
   switchView('evaluation');
 
@@ -1639,19 +1643,153 @@ function handleDownloadPracticeLogReport() {
   downloadMarkdownFile(md, `CoachQuest_練習復盤_${log.bossName}_${player.nickname}`);
 }
 
+// 複製當前練習紀錄逐字稿全文至剪貼簿 (專為手機無法下載檔案之學員設計)
+function handleCopyPracticeLogText() {
+  const logId = state.currentViewingLogId;
+  if (!logId) return;
+  const log = InventoryManager.getPracticeLogById(logId);
+  if (!log) {
+    showSystemToast('找不到該筆對話紀錄');
+    return;
+  }
+
+  const player = InventoryManager.getPlayerData();
+  const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
+  const dims = log.dimensionScores || {};
+
+  let text = `【CoachQuest 教練對話實戰練習實錄】\n`;
+  text += `學員教練：${player.nickname || '冒險者'} (${player.avatar})\n`;
+  text += `對決關主：${log.bossName} (${log.bossTitle || ''})\n`;
+  text += `練習時間：${dateStr}\n`;
+  text += `綜合評分：${log.score} 分 (${log.isCaptured ? '成功收攏' : '心防未破'})\n`;
+  text += `互動回合：共 ${log.turns || 1} 回合\n`;
+  if (log.bestCoachQuote) text += `\n✨ 破心教練金句：「${log.bestCoachQuote}」\n`;
+  if (log.winningReason) text += `🎯 突破關鍵復盤：${log.winningReason}\n`;
+  if (log.advice) text += `💡 導師調整建議：${log.advice}\n`;
+  text += `\n📊 ICF 五大核心能力維度：\n`;
+  text += `- 深度同理：${dims.empathy || 75} 分\n`;
+  text += `- 有效傾聽：${dims.listening || 75} 分\n`;
+  text += `- 提問引導：${dims.questioning || 70} 分\n`;
+  text += `- 視角重構：${dims.reframing || 70} 分\n`;
+  text += `- 行動激發：${dims.action_drive || 65} 分\n`;
+  text += `\n📜 完整對話練習逐字稿：\n`;
+
+  if (log.dialogueHistory && log.dialogueHistory.length > 0) {
+    let round = 1;
+    for (const msg of log.dialogueHistory) {
+      if (msg.role === 'user') {
+        text += `\n[回合 ${round}] 教練：\n${msg.content}\n`;
+        round++;
+      } else {
+        text += `[關主] ${log.bossName}：\n${msg.content}\n`;
+        if (msg.innerThought) {
+          text += `(💭 關主心聲：${msg.innerThought})\n`;
+        }
+      }
+    }
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showSystemToast('📋 逐字稿全文已複製到剪貼簿！可直接貼至 LINE、微信或備忘錄！');
+    }).catch(() => {
+      copyFallbackText(text);
+    });
+  } else {
+    copyFallbackText(text);
+  }
+}
+
+function copyFallbackText(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showSystemToast('📋 逐字稿全文已複製！可直接至通訊軟體貼上！');
+  } catch (_) {
+    prompt('請複製以下對話逐字稿：', text);
+  }
+  document.body.removeChild(ta);
+}
+
+// 自動將實戰練習紀錄非同步同步至雲端後台
+async function syncPracticeLogToBackend(boss, evalData, dialogueHistory, logId) {
+  try {
+    const player = InventoryManager.getPlayerData();
+    const cleanDialogue = Array.isArray(dialogueHistory) ? JSON.parse(JSON.stringify(dialogueHistory)) : [];
+    const payload = {
+      id: logId,
+      studentName: player.nickname || '冒險者教練',
+      studentAvatar: player.avatar || '🧙‍♂️',
+      bossId: boss.id,
+      bossName: boss.name,
+      bossAvatar: boss.avatar,
+      bossTitle: boss.title,
+      category: boss.category,
+      score: Number(evalData.score) || 0,
+      isCaptured: Number(evalData.score) >= 70,
+      turns: cleanDialogue.filter(m => m.role === 'user').length,
+      bestCoachQuote: evalData.bestCoachQuote || '',
+      winningReason: evalData.winningReason || '',
+      advice: evalData.advice || '',
+      dimensions: evalData.dimensions || {},
+      dialogueHistory: cleanDialogue
+    };
+
+    const res = await fetch('/api/practice-logs/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      console.log('✅ 實戰練習紀錄已成功留存於雲端後台！');
+      return true;
+    }
+  } catch (err) {
+    console.warn('雲端備援同步提醒 (離線或暫時無法連線):', err);
+  }
+  return false;
+}
+
 function downloadMarkdownFile(content, baseName) {
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const cleanName = baseName.replace(/[^\w\u4e00-\u9fa5]/g, '_');
-  const dateStr = new Date().toISOString().slice(0, 10);
-  a.download = `${cleanName}_${dateStr}.md`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  showSystemToast('📥 報告已下載完成！');
+  let downloadTriggered = false;
+  try {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cleanName = baseName.replace(/[^\w\u4e00-\u9fa5]/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `${cleanName}_${dateStr}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    downloadTriggered = true;
+  } catch (e) {
+    console.warn('瀏覽器原生下載失敗:', e);
+  }
+
+  // 手機環境 (iOS/Android/LINE/WeChat) 自動同步複製至剪貼簿作為安全備援
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Line|MicroMessenger/i.test(navigator.userAgent);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(content).then(() => {
+      if (isMobile) {
+        showSystemToast('📥 報告已嘗試下載！若手機阻擋存檔，全文已為您同步複製到剪貼簿，可直接至 LINE 貼上！');
+      } else {
+        showSystemToast('📥 報告已下載完成！(全文已同步複製至剪貼簿)');
+      }
+    }).catch(() => {
+      showSystemToast(downloadTriggered ? '📥 報告已下載完成！' : '手機若無法下載，請使用「複製逐字稿」按鈕！');
+    });
+  } else {
+    showSystemToast(downloadTriggered ? '📥 報告已下載完成！' : '手機若無法下載，請使用「複製逐字稿」按鈕！');
+  }
 }
 
 // ========================================================
