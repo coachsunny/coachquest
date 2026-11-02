@@ -1225,24 +1225,25 @@ export async function handleApiRequest(request, env) {
     // 13. POST /api/practice-logs/submit (學員端提交實戰對話紀錄至後台)
     if (pathname === '/practice-logs/submit' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      const studentName = (body.studentName || '冒險者教練').trim().substring(0, 30);
-      const studentAvatar = body.studentAvatar || '🧙‍♂️';
-      const bossId = body.bossId || 'boss_unknown';
-      const bossName = body.bossName || '神秘關主';
-      const bossAvatar = body.bossAvatar || '👤';
-      const bossTitle = body.bossTitle || '';
-      const category = body.category || 'general';
-      const score = Number(body.score) || 0;
-      const isCaptured = typeof body.isCaptured === 'boolean' ? body.isCaptured : score >= 70;
-      const turns = Number(body.turns) || 0;
-      const bestCoachQuote = body.bestCoachQuote || '';
-      const winningReason = body.winningReason || '';
-      const advice = body.advice || '';
-      const dimensions = body.dimensions || {};
-      const dialogueHistory = Array.isArray(body.dialogueHistory) ? body.dialogueHistory : [];
+      const payload = (body && typeof body.log === 'object' && body.log !== null) ? body.log : body;
+      const studentName = (payload.studentName || payload.studentNickname || payload.playerName || '冒險者教練').trim().substring(0, 30);
+      const studentAvatar = payload.studentAvatar || '🧙‍♂️';
+      const bossId = payload.bossId || 'boss_unknown';
+      const bossName = payload.bossName || '神秘關主';
+      const bossAvatar = payload.bossAvatar || '👤';
+      const bossTitle = payload.bossTitle || '';
+      const category = payload.category || 'general';
+      const score = Number(payload.score) || 0;
+      const isCaptured = typeof payload.isCaptured === 'boolean' ? payload.isCaptured : score >= 70;
+      const turns = Number(payload.turns) || 0;
+      const bestCoachQuote = payload.bestCoachQuote || '';
+      const winningReason = payload.winningReason || '';
+      const advice = payload.advice || '';
+      const dimensions = payload.dimensions || {};
+      const dialogueHistory = Array.isArray(payload.dialogueHistory) ? payload.dialogueHistory : [];
 
       const logEntry = {
-        id: body.id || ('log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
+        id: payload.id || ('log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
         studentName,
         studentAvatar,
         bossId,
