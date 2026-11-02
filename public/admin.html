@@ -440,6 +440,21 @@
 
   <!-- 區塊 2: 管理看板主介面 -->
   <main class="container hidden" id="dashboardSection">
+
+    <!-- KV 狀態警告橫幅 (未綁定時顯示) -->
+    <div id="kvWarningBanner" class="hidden" style="background: #fffbeb; border: 1.5px solid #fde68a; border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+      <div>
+        <div style="font-weight: 700; color: #b45309; font-size: 0.95rem; margin-bottom: 0.25rem;">
+          ⚠️ 伺服器目前運作於臨時記憶體（未綁定 Cloudflare KV 資料庫）
+        </div>
+        <div style="font-size: 0.85rem; color: #92400e; line-height: 1.4;">
+          Cloudflare Workers 邊緣節點休眠或重啟時會清空臨時記憶體。建議至 Cloudflare Dashboard 綁定 <b>COACHQUEST_KV</b> 即可享有永久雲端保存保證！
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button class="btn btn-primary btn-sm" id="btnShowKvGuide" style="white-space: nowrap;">📘 查看 1 分鐘免費綁定教學</button>
+      </div>
+    </div>
     
     <!-- 數據概覽 -->
     <div class="stats-grid">
@@ -492,7 +507,11 @@
         </select>
       </div>
 
-      <div>
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <button id="btnImportStudentSave" class="btn btn-outline btn-sm" title="若學員曾手動匯出百寶箱存檔，可在此直接上傳還原至後台">
+          📥 匯入學員存檔 (.json)
+        </button>
+        <input type="file" id="inputAdminImportSave" accept=".json" style="display: none;">
         <button id="btnClearAllLogs" class="btn btn-danger btn-sm" title="危險：清空伺服器所有紀錄">
           🗑️ 清空所有紀錄
         </button>
@@ -548,6 +567,50 @@
           </button>
         </div>
         <button class="btn btn-outline btn-sm" id="btnCloseDetailModalBottom">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗: Cloudflare KV 1 分鐘免費綁定教學 -->
+  <div class="modal-overlay hidden" id="modalKvGuide">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>📘 1 分鐘免費綁定 Cloudflare KV 資料庫教學</h3>
+        <button class="btn btn-outline btn-sm" id="btnCloseKvGuideModal" style="border: none; font-size: 1.25rem;">&times;</button>
+      </div>
+      <div class="modal-body" style="line-height: 1.7; font-size: 0.95rem; color: #334155;">
+        <p style="margin-bottom: 0.85rem;">
+          Cloudflare Workers 預設是<b>無狀態（Stateless）邊緣運算</b>。只要綁定 Cloudflare 免費提供的 <b>KV 資料庫</b>（每天 10 萬次讀取 / 1 千次寫入完全免費），學員的練習對話就會<b>全球永久持久保存</b>！
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;">
+          <h4 style="color: #0f172a; margin-bottom: 0.5rem;">步驟 1：建立 KV Namespace</h4>
+          <ol style="margin-left: 1.25rem;">
+            <li>登入 <a href="https://dash.cloudflare.com" target="_blank" style="color: var(--primary); font-weight: 700;">Cloudflare Dashboard</a>。</li>
+            <li>點擊左側導航選單的 <b>Storage & Databases</b> ➔ 點選 <b>KV</b>。</li>
+            <li>點擊右上角 <b>Create a Namespace</b> 按鈕。</li>
+            <li>Namespace Name 填寫：<code style="background:#e0e7ff; color:#4338ca; padding:2px 6px; border-radius:4px; font-weight:700;">COACHQUEST_KV</code>，點擊 <b>Add</b>。</li>
+          </ol>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem;">
+          <h4 style="color: #0f172a; margin-bottom: 0.5rem;">步驟 2：綁定到 CoachQuest Worker</h4>
+          <ol style="margin-left: 1.25rem;">
+            <li>在左側導航選單點選 <b>Workers & Pages</b> ➔ 點進 <b>coachquest</b>。</li>
+            <li>切換至 <b>Settings</b> 分頁 ➔ 點選 <b>Variables and Secrets</b>（或 Bindings）。</li>
+            <li>在 <b>KV Namespace Bindings</b> 區塊點擊 <b>Add binding</b>。</li>
+            <li><b>Variable name</b> 填寫：<code style="background:#e0e7ff; color:#4338ca; padding:2px 6px; border-radius:4px; font-weight:700;">COACHQUEST_KV</code>。</li>
+            <li><b>KV namespace</b> 下拉選單選取剛才建立的 <code style="background:#e0e7ff; color:#4338ca; padding:2px 6px; border-radius:4px; font-weight:700;">COACHQUEST_KV</code>。</li>
+            <li>點擊 <b>Save and Deploy</b> 即可！</li>
+          </ol>
+        </div>
+
+        <p style="color: #059669; font-weight: 700;">
+          ✅ 完成後重新整理本管理看板，上方警告將自動消失，並開啟永久雲端同步功能！
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" id="btnCloseKvGuideModalBottom">了解，我知道了</button>
       </div>
     </div>
   </div>

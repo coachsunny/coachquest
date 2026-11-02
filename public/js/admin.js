@@ -42,7 +42,18 @@ const elements = {
   btnCloseDetailModal: document.getElementById('btnCloseDetailModal'),
   btnCloseDetailModalBottom: document.getElementById('btnCloseDetailModalBottom'),
   btnDownloadDetailMd: document.getElementById('btnDownloadDetailMd'),
-  btnCopyDetailText: document.getElementById('btnCopyDetailText')
+  btnCopyDetailText: document.getElementById('btnCopyDetailText'),
+
+  // KV 橫幅與導引彈窗
+  kvWarningBanner: document.getElementById('kvWarningBanner'),
+  btnShowKvGuide: document.getElementById('btnShowKvGuide'),
+  modalKvGuide: document.getElementById('modalKvGuide'),
+  btnCloseKvGuideModal: document.getElementById('btnCloseKvGuideModal'),
+  btnCloseKvGuideModalBottom: document.getElementById('btnCloseKvGuideModalBottom'),
+
+  // 匯入學員存檔
+  btnImportStudentSave: document.getElementById('btnImportStudentSave'),
+  inputAdminImportSave: document.getElementById('inputAdminImportSave')
 };
 
 // 16 位關主速查字典
@@ -115,6 +126,26 @@ function bindEvents() {
   elements.btnCopyDetailText?.addEventListener('click', () => {
     if (viewingLog) copyLogTranscript(viewingLog);
   });
+
+  // KV 教學彈窗
+  elements.btnShowKvGuide?.addEventListener('click', () => {
+    elements.modalKvGuide?.classList.remove('hidden');
+  });
+  elements.btnCloseKvGuideModal?.addEventListener('click', () => {
+    elements.modalKvGuide?.classList.add('hidden');
+  });
+  elements.btnCloseKvGuideModalBottom?.addEventListener('click', () => {
+    elements.modalKvGuide?.classList.add('hidden');
+  });
+  elements.modalKvGuide?.addEventListener('click', (e) => {
+    if (e.target === elements.modalKvGuide) elements.modalKvGuide.classList.add('hidden');
+  });
+
+  // 匯入學員存檔 (.json)
+  elements.btnImportStudentSave?.addEventListener('click', () => {
+    elements.inputAdminImportSave?.click();
+  });
+  elements.inputAdminImportSave?.addEventListener('change', handleAdminImportSave);
 }
 
 // 驗證登入狀態
@@ -229,6 +260,16 @@ async function loadPracticeLogs() {
         showLoginView();
       }
       return;
+    }
+
+    // 檢查是否有綁定 KV 資料庫，未綁定則顯示橫幅提示
+    const hasKV = (data.hasKV !== undefined) ? data.hasKV : (data.stats && data.stats.hasKV);
+    if (elements.kvWarningBanner) {
+      if (hasKV === false) {
+        elements.kvWarningBanner.classList.remove('hidden');
+      } else {
+        elements.kvWarningBanner.classList.add('hidden');
+      }
     }
 
     // 更新統計指標
@@ -606,6 +647,41 @@ function copyLogTranscript(log) {
     });
   } else {
     prompt('請複製以下內容：', text);
+  }
+}
+
+// 處理管理員匯入學員存檔 (.json)
+async function handleAdminImportSave(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+
+    const res = await fetch('/api/admin/import-save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(parsed)
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      alert(`🎉 ${data.message}`);
+      await loadPracticeLogs();
+    } else {
+      alert(`❌ 匯入失敗: ${data.error || '存檔內容無法解析'}`);
+    }
+  } catch (err) {
+    alert(`❌ 讀取存檔檔案失敗: ${err.message}`);
+  } finally {
+    if (elements.inputAdminImportSave) elements.inputAdminImportSave.value = '';
   }
 }
 

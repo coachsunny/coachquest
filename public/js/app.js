@@ -23,6 +23,7 @@ const state = {
   currentEvaluation: null,
   currentViewingBossId: null,
   currentViewingLogId: null,
+  currentBattleSessionId: null,
 
   // 多人對戰狀態
   isMultiplayer: false,
@@ -201,6 +202,7 @@ export function initApp() {
     renderCategoryTabs();
     renderBossGrid();
     checkApiStatus();
+    autoSyncLocalPracticeLogsToBackend();
 
     // 首次進入時啟動起程註冊設定
     if (!InventoryManager.isOnboarded()) {
@@ -524,6 +526,7 @@ function launchMultiplayerBattle(room) {
   state.defenseHp = 100;
   state.dialogueHistory = [];
   state.currentEvaluation = null;
+  state.currentBattleSessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
   // 設定頂部關主資訊
   if (elements.battleBossAvatar) elements.battleBossAvatar.textContent = room.bossAvatar;
@@ -855,6 +858,7 @@ export function startBossBattle(bossId) {
   state.defenseHp = 100;
   state.dialogueHistory = [];
   state.currentEvaluation = null;
+  state.currentBattleSessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
   elements.opponentLiveBanner?.classList.add('hidden');
   elements.clientSecretBox?.classList.add('hidden');
@@ -929,26 +933,41 @@ async function handleSendMessage(overrideText = null) {
   }
 
   // 3. 單人挑戰 或 多人模式 A（雙人競速）
-  // 防禦：檢查畫面上是否已存在此條待回覆的 user 泡泡，避免重試時連續堆疊多個重複氣泡
-  const lastBubble = elements.chatMessages?.querySelector('.message-row.user:last-of-type');
-  const isDuplicateBubble = lastBubble && lastBubble.querySelector('.message-bubble')?.textContent === userText && (
-    !elements.chatMessages?.querySelector('.message-row.boss:last-of-type') || 
-    elements.chatMessages?.lastElementChild?.classList.contains('system-notice-bar') ||
-    elements.chatMessages?.lastElementChild === lastBubble
-  );
+  // 防禦：精準檢查畫面上最後一條使用者發言，若尚未獲得關主回覆且內容相同，避免重試時連續堆疊多個重複氣泡
+  const allUserRows = Array.from(elements.chatMessages?.querySelectorAll('.message-row.user') || []);
+  const allBossRows = Array.from(elements.chatMessages?.querySelectorAll('.message-row.boss') || []);
+  const lastUserRow = allUserRows.length > 0 ? allUserRows[allUserRows.length - 1] : null;
+  const lastBossRow = allBossRows.length > 0 ? allBossRows[allBossRows.length - 1] : null;
+
+  let isUnansweredLastUser = false;
+  if (lastUserRow) {
+    if (!lastBossRow) {
+      isUnansweredLastUser = true;
+    } else {
+      isUnansweredLastUser = (lastBossRow.compareDocumentPosition(lastUserRow) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    }
+  }
+
+  const lastUserBubbleText = lastUserRow?.querySelector('.message-bubble')?.textContent?.trim() || '';
+  const isDuplicateBubble = isUnansweredLastUser && (lastUserBubbleText === userText);
+
+  // 清除畫面上的錯誤重試列
+  elements.chatMessages?.querySelectorAll('.system-error-retry-bar').forEach(el => el.remove());
 
   if (!isDuplicateBubble) {
-    if (state.dialogueHistory.length > 0 && state.dialogueHistory[state.dialogueHistory.length - 1].role === 'user') {
+    // 確保 state.dialogueHistory 不連續堆疊 user 訊息
+    while (state.dialogueHistory.length > 0 && state.dialogueHistory[state.dialogueHistory.length - 1].role === 'user') {
       state.dialogueHistory.pop();
     }
     const userMsg = { role: 'user', content: userText };
     state.dialogueHistory.push(userMsg);
     appendMessageToChat(userMsg);
   } else {
-    // 若為重試發送，歷史紀錄確保為該訊息
-    if (state.dialogueHistory.length === 0 || state.dialogueHistory[state.dialogueHistory.length - 1].role !== 'user') {
-      state.dialogueHistory.push({ role: 'user', content: userText });
+    // 若為重試發送，歷史紀錄確保最後一條為該訊息
+    while (state.dialogueHistory.length > 0 && state.dialogueHistory[state.dialogueHistory.length - 1].role === 'user') {
+      state.dialogueHistory.pop();
     }
+    state.dialogueHistory.push({ role: 'user', content: userText });
   }
 
   state.isWaitingResponse = true;
@@ -975,6 +994,12 @@ async function handleSendMessage(overrideText = null) {
       throw new Error(data.error || '後端伺服器回應異常');
     }
 
+    if (data.fallbackUsed && data.fallbackInfo) {
+      console.log('Dual-Engine Fallback activated:', data.fallbackInfo);
+      const toEngine = data.fallbackInfo.to === 'gemini' ? 'Google Gemini' : 'DeepSeek';
+      showSystemToast(LangManager.t(`⚡ 備援機制：已自動無縫由 ${toEngine} 引擎接手對話，練習不中斷！`), 3500);
+    }
+
     const replyText = LangManager.t(data.reply || '……');
     const thoughtText = LangManager.t(data.innerThought || '');
 
@@ -991,6 +1016,7 @@ async function handleSendMessage(overrideText = null) {
     state.defenseHp = Math.max(15, state.defenseHp - damage);
     updateBattleHp(state.defenseHp);
     updateTurnBadge();
+    syncLivePracticeSession(state.selectedBoss, state.dialogueHistory);
 
     // 模式 A 同步競速血條至房間
     if (state.isMultiplayer && state.mpMode === 'pvp_speedrun') {
@@ -1126,10 +1152,20 @@ function appendErrorRetryNotice(errorMsg, failedText) {
   row.style.borderRadius = '12px';
   row.style.maxWidth = '90%';
 
+  const isBalanceError = errorMsg && (errorMsg.includes('Insufficient Balance') || errorMsg.includes('餘額不足'));
+  const currentModel = getSavedModel();
+  const isDeepSeekActive = currentModel.startsWith('deepseek');
+
   const msgSpan = document.createElement('div');
   msgSpan.style.fontSize = '0.85rem';
   msgSpan.style.lineHeight = '1.45';
-  msgSpan.textContent = LangManager.t(`⚠️ 連線短暫不穩定：${errorMsg}`);
+  msgSpan.style.textAlign = 'center';
+
+  if (isBalanceError) {
+    msgSpan.innerHTML = LangManager.t('⚠️ <b>DeepSeek 帳戶餘額不足</b>：建議一鍵切換至免費穩定的 Google Gemini 引擎繼續挑戰！');
+  } else {
+    msgSpan.textContent = LangManager.t(`⚠️ 連線短暫不穩定：${errorMsg}`);
+  }
   row.appendChild(msgSpan);
 
   const btnRow = document.createElement('div');
@@ -1138,12 +1174,32 @@ function appendErrorRetryNotice(errorMsg, failedText) {
   btnRow.style.justifyContent = 'center';
   btnRow.style.flexWrap = 'wrap';
 
+  // 1. 一鍵快速切換備援引擎按鈕 (若 DeepSeek 失敗則切換 Gemini，反之亦然)
+  const btnFastSwitch = document.createElement('button');
+  btnFastSwitch.className = 'btn btn-primary btn-sm';
+  btnFastSwitch.style.padding = '0.3rem 0.85rem';
+  btnFastSwitch.style.fontSize = '0.82rem';
+  btnFastSwitch.style.background = isDeepSeekActive ? '#2563eb' : '#059669';
+  btnFastSwitch.textContent = isDeepSeekActive 
+    ? LangManager.t('⚡ 一鍵切換 Gemini 引擎並重發') 
+    : LangManager.t('⚡ 一鍵切換 DeepSeek 引擎並重發');
+  btnFastSwitch.onclick = () => {
+    row.remove();
+    const newModel = isDeepSeekActive ? 'gemini-3.5-flash-lite' : 'deepseek-chat';
+    localStorage.setItem('coachquest_custom_model', newModel);
+    if (elements.selectModel) elements.selectModel.value = newModel;
+    showSystemToast(LangManager.t(`已切換為 ${newModel} 引擎，立即重發...`));
+    handleSendMessage(failedText);
+  };
+  btnRow.appendChild(btnFastSwitch);
+
+  // 2. 原模型重試發送按鈕
   if (failedText) {
     const btnRetry = document.createElement('button');
-    btnRetry.className = 'btn btn-primary btn-sm';
+    btnRetry.className = 'btn btn-outline btn-sm';
     btnRetry.style.padding = '0.3rem 0.85rem';
     btnRetry.style.fontSize = '0.82rem';
-    btnRetry.textContent = LangManager.t('🔄 點擊重試發送');
+    btnRetry.textContent = LangManager.t('🔄 點擊重試');
     btnRetry.onclick = () => {
       row.remove();
       handleSendMessage(failedText);
@@ -1151,11 +1207,12 @@ function appendErrorRetryNotice(errorMsg, failedText) {
     btnRow.appendChild(btnRetry);
   }
 
+  // 3. 詳細設定按鈕
   const btnSettings = document.createElement('button');
   btnSettings.className = 'btn btn-outline btn-sm';
   btnSettings.style.padding = '0.3rem 0.85rem';
   btnSettings.style.fontSize = '0.82rem';
-  btnSettings.textContent = LangManager.t('⚙️ 切換模型 (Gemini / DeepSeek)');
+  btnSettings.textContent = LangManager.t('⚙️ 詳細設定');
   btnSettings.onclick = () => {
     openSettingsModal();
   };
@@ -1196,6 +1253,9 @@ function updateTurnBadge() {
 // 暫時撤退
 function handleRetreat() {
   if (confirm('確定要暫時撤退回到道館地圖嗎？本次練習進度將不予計分。')) {
+    if (state.selectedBoss && state.dialogueHistory && state.dialogueHistory.length > 0) {
+      syncLivePracticeSession(state.selectedBoss, state.dialogueHistory, false);
+    }
     if (state.isMultiplayer) {
       MultiplayerManager.leaveRoom();
       state.isMultiplayer = false;
@@ -1756,6 +1816,65 @@ async function syncPracticeLogToBackend(boss, evalData, dialogueHistory, logId) 
   return false;
 }
 
+// 進行中實戰對話每回合即時自動同步至後台 (防中途關閉或離線未結算)
+async function syncLivePracticeSession(boss, dialogueHistory, isFinished = false) {
+  if (!boss || !Array.isArray(dialogueHistory) || dialogueHistory.length === 0) return;
+  try {
+    const player = InventoryManager.getPlayerData();
+    const cleanDialogue = JSON.parse(JSON.stringify(dialogueHistory));
+    if (!state.currentBattleSessionId) {
+      state.currentBattleSessionId = 'live_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    }
+
+    const payload = {
+      sessionId: state.currentBattleSessionId,
+      studentName: player.nickname || '冒險者教練',
+      studentAvatar: player.avatar || '🧙‍♂️',
+      bossId: boss.id,
+      bossName: boss.name,
+      bossAvatar: boss.avatar,
+      bossTitle: boss.title,
+      category: boss.category,
+      score: isFinished ? (state.currentEvaluation?.score || 0) : 0,
+      isCaptured: isFinished ? (Number(state.currentEvaluation?.score) >= 70) : false,
+      isFinished: isFinished,
+      turns: cleanDialogue.filter(m => m.role === 'user').length,
+      dialogueHistory: cleanDialogue
+    };
+
+    fetch('/api/practice-logs/live', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+// 開啟應用或恢復連線時，自動批次補傳本地未同步之歷史紀錄
+async function autoSyncLocalPracticeLogsToBackend() {
+  try {
+    const logs = InventoryManager.getPracticeLogs();
+    const player = InventoryManager.getPlayerData();
+    if (!logs || logs.length === 0) return;
+
+    fetch('/api/practice-logs/batch-submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        studentName: player.nickname || '冒險者教練',
+        studentAvatar: player.avatar || '🧙‍♂️',
+        logs: logs
+      })
+    }).then(r => r.json()).then(data => {
+      if (data.ok) {
+        console.log(`☁️ 雲端背景已自動同步 ${data.synced || logs.length} 筆實戰紀錄`);
+      }
+    }).catch(err => {
+      console.warn('雲端背景同步未就緒:', err);
+    });
+  } catch (_) {}
+}
+
 function downloadMarkdownFile(content, baseName) {
   let downloadTriggered = false;
   try {
@@ -2250,8 +2369,29 @@ async function handleTestApiKey() {
         elements.apiStatusDot.className = 'status-dot dot-ok';
       }
     } else {
-      resultEl.textContent = `❌ 連線失敗：${data.error || '請檢查金鑰'}`;
-      resultEl.style.color = '#ef4444';
+      const isBalance = data.error && (data.error.includes('Insufficient Balance') || data.error.includes('餘額不足'));
+      if (isBalance) {
+        resultEl.innerHTML = `
+          <div style="margin-top:0.35rem; line-height: 1.45;">
+            <span style="color:#ef4444; font-weight:600;">❌ 連線失敗：DeepSeek 帳戶餘額不足</span><br>
+            <span style="font-size:0.8rem; color:#64748b;">（伺服器已內建 Google Gemini 金鑰，免儲值即可免費暢玩）</span><br>
+            <button type="button" class="btn btn-sm btn-primary" style="margin-top:0.35rem; font-size:0.78rem; padding:0.25rem 0.65rem;" id="btnQuickSwitchGemini">
+              ⚡ 一鍵切換為 Google Gemini 免費引擎並測試
+            </button>
+          </div>
+        `;
+        document.getElementById('btnQuickSwitchGemini')?.addEventListener('click', () => {
+          if (elements.selectModel) elements.selectModel.value = 'gemini-3.5-flash-lite';
+          if (elements.inputApiKey && elements.inputApiKey.value.startsWith('sk-')) {
+            elements.inputApiKey.value = '';
+          }
+          localStorage.setItem('coachquest_custom_model', 'gemini-3.5-flash-lite');
+          handleTestApiKey();
+        });
+      } else {
+        resultEl.textContent = `❌ 連線失敗：${data.error || '請檢查金鑰'}`;
+        resultEl.style.color = '#ef4444';
+      }
     }
   } catch (err) {
     resultEl.textContent = `❌ 連線錯誤: ${err.message}`;

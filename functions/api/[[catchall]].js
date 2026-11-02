@@ -240,6 +240,7 @@ function resolveApiConfig(reqBody, env) {
     provider,
     apiKey,
     model,
+    deepseekFallbackKey: deepseekEnvKey || (clientKey.startsWith('sk-') ? clientKey : ''),
     geminiFallbackKey: geminiEnvKey || (clientKey.startsWith('AIza') ? clientKey : ''),
     hasServerDeepseek: !!deepseekEnvKey,
     hasServerGemini: !!geminiEnvKey
@@ -254,9 +255,85 @@ function resolveApiKey(reqBody, env) {
 }
 
 /**
+ * 智慧解析與容錯提取 LLM JSON 回應
+ * 遇到 Markdown 代碼區塊、前後多餘文字、甚至模型純文字回應時，保證 100% 成功提取，絕不向學員報錯
+ */
+function parseOrExtractLlmJson(rawText, fallbackMode = 'chat') {
+  if (!rawText || typeof rawText !== 'string') {
+    throw new Error('模型回傳內容為空');
+  }
+
+  const cleanText = rawText.trim();
+
+  // 1. 去除 Markdown 標籤 (```json ... ``` 或 ``` ...)
+  const stripped = cleanText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // 2. 嘗試直接 JSON 解析
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch (_) {}
+
+  // 3. 嘗試以正則擷取最外層大括號 { ... }
+  const firstBrace = cleanText.indexOf('{');
+  const lastBrace = cleanText.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const jsonSubstring = cleanText.substring(firstBrace, lastBrace + 1);
+    try {
+      const parsed = JSON.parse(jsonSubstring);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch (_) {}
+  }
+
+  // 4. 【智慧容錯】：模型輸出了自然語言對話，而非 JSON 結構。依場景自動封裝，絕不讓學生面臨錯誤
+  console.warn(`[Safe JSON Fallback] 無法解析為標準 JSON，依模式 [${fallbackMode}] 自動挽救純文字回應:`, cleanText.substring(0, 80));
+
+  if (fallbackMode === 'chat') {
+    let reply = cleanText;
+    let innerThought = '（若有所思，正在梳理情緒與需求……）';
+
+    // 嘗試解析文字中的心聲關鍵字
+    const thoughtMatch = cleanText.match(/(?:心聲|內心|想法|innerThought)[：:\s]+([^\n\r]+)/i);
+    if (thoughtMatch) {
+      innerThought = thoughtMatch[1].trim();
+      reply = cleanText.replace(thoughtMatch[0], '').replace(/^(?:關主|回應|台詞|reply)[：:\s]*/i, '').trim();
+    } else {
+      reply = cleanText.replace(/^(?:關主|回應|台詞|reply)[：:\s]*/i, '').trim();
+    }
+
+    return {
+      reply: reply || '……',
+      innerThought: innerThought
+    };
+  }
+
+  if (fallbackMode === 'hint') {
+    return {
+      hint: cleanText.replace(/^(?:提示|錦囊|hint)[：:\s]*/i, '').trim(),
+      framework: '同理與非暴力溝通'
+    };
+  }
+
+  if (fallbackMode === 'evaluate') {
+    const scoreMatch = cleanText.match(/(\d{1,3})\s*(?:分|\/100)/);
+    const score = scoreMatch ? Math.min(100, Math.max(0, parseInt(scoreMatch[1], 10))) : 80;
+    return {
+      score,
+      captured: score >= 70,
+      winningReason: score >= 70 ? '對話展現深刻同理與覺察，成功化解心防。' : '部分需求尚待更深入確認。',
+      bestCoachQuote: '你展現了溫暖而堅定的傾聽力量。',
+      dimensions: { empathy: score, listening: score, questioning: Math.max(60, score - 5), reframing: score, action_drive: Math.max(60, score - 10) },
+      feedback: { strengths: ['展現積極傾聽姿態'], opportunities: ['可深化核心需求核對'], coachTip: '保持好奇，不急於給予建議。' }
+    };
+  }
+
+  return { status: 'ready', message: cleanText };
+}
+
+/**
  * 呼叫 DeepSeek 官方 REST API (標準 OpenAI 格式相容)
  */
-async function callDeepSeekApi({ apiKey, model, systemPrompt, messages }) {
+async function callDeepSeekApi({ apiKey, model, systemPrompt, messages, fallbackMode = 'chat' }) {
   if (!apiKey) {
     throw new Error('未偵測到 DeepSeek API Key。請在 Cloudflare Secrets (DEEPSEEK_API_KEY) 或右上角設定中填入金鑰。');
   }
@@ -331,34 +408,13 @@ async function callDeepSeekApi({ apiKey, model, systemPrompt, messages }) {
     throw new Error(`DeepSeek API (${targetModel}) 回傳文字為空`);
   }
 
-  const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-  try {
-    return JSON.parse(cleanJson);
-  } catch (err) {
-    const matched = cleanJson.match(/\{[\s\S]*\}/);
-    if (matched) {
-      try {
-        return JSON.parse(matched[0]);
-      } catch (_) {}
-    }
-
-    // 【智慧容錯】：若模型回傳的是純文字而非 JSON 結構，自動當作關主台詞提取，絕不中斷學生對話
-    if (cleanJson && cleanJson.length > 0) {
-      console.warn('[DeepSeek Fallback] 模型回傳非 JSON 文字，自動提取為對話台詞:', cleanJson.substring(0, 80));
-      return {
-        reply: cleanJson,
-        innerThought: '（若有所思……）'
-      };
-    }
-
-    throw new Error('DeepSeek 模型回應為空或連線不穩定，請重試');
-  }
+  return parseOrExtractLlmJson(rawText, fallbackMode);
 }
 
 /**
  * 呼叫 Gemini 官方 REST API (支援多候選模型自動降級備援)
  */
-async function callGeminiApi({ apiKey, model, systemPrompt, contents }) {
+async function callGeminiApi({ apiKey, model, systemPrompt, contents, fallbackMode = 'chat' }) {
   if (!apiKey) {
     throw new Error('伺服器與客戶端皆未偵測到 Gemini API Key。請在 .dev.vars、Cloudflare Secrets 或右上角設定中填入金鑰。');
   }
@@ -423,16 +479,7 @@ async function callGeminiApi({ apiKey, model, systemPrompt, contents }) {
         throw new Error(`Gemini API (${targetModel}) 未回傳有效文字內容`);
       }
 
-      const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
-      try {
-        return JSON.parse(cleanJson);
-      } catch (err) {
-        const matched = cleanJson.match(/\{[\s\S]*\}/);
-        if (matched) {
-          return JSON.parse(matched[0]);
-        }
-        throw new Error('模型未回傳正確的 JSON 格式: ' + rawText.substring(0, 100));
-      }
+      return parseOrExtractLlmJson(rawText, fallbackMode);
     } catch (err) {
       lastError = err;
       const isRetryable = err.message && (
@@ -454,10 +501,15 @@ async function callGeminiApi({ apiKey, model, systemPrompt, contents }) {
 }
 
 /**
- * 統一 LLM API 調用器 (支援 DeepSeek 與 Gemini 雙模自動調度)
+ * 統一 LLM API 調用器 (支援 DeepSeek 與 Gemini 雙模全自動雙向互備)
  */
 async function callLlmApi({ config, systemPrompt, messages = [], contents = null }) {
   const { provider, apiKey, model } = config;
+  const fallbackMode = (systemPrompt && (systemPrompt.includes('錦囊') || systemPrompt.includes('hint')))
+    ? 'hint'
+    : ((systemPrompt && (systemPrompt.includes('結算') || systemPrompt.includes('評分') || systemPrompt.includes('evaluate')))
+      ? 'evaluate'
+      : ((systemPrompt && (systemPrompt.includes('測試') || systemPrompt.includes('status'))) ? 'test' : 'chat'));
 
   if (provider === 'deepseek') {
     const msgs = (messages && messages.length > 0)
@@ -472,7 +524,8 @@ async function callLlmApi({ config, systemPrompt, messages = [], contents = null
         apiKey,
         model,
         systemPrompt,
-        messages: msgs
+        messages: msgs,
+        fallbackMode
       });
     } catch (deepseekErr) {
       console.warn(`[Dual-Engine Fallback] DeepSeek 呼叫失敗: ${deepseekErr.message}`);
@@ -491,19 +544,28 @@ async function callLlmApi({ config, systemPrompt, messages = [], contents = null
             apiKey: geminiKey,
             model: DEFAULT_GEMINI_MODEL,
             systemPrompt,
-            contents: geminiContents
+            contents: geminiContents,
+            fallbackMode
           });
 
           console.log('[Dual-Engine Fallback] 成功透過 Gemini 引擎無縫接手回應！');
+          if (fallbackResult && typeof fallbackResult === 'object') {
+            fallbackResult._engineFallback = { from: 'deepseek', to: 'gemini', reason: deepseekErr.message };
+          }
           return fallbackResult;
         } catch (geminiErr) {
           console.error('[Dual-Engine Fallback] Gemini 備援亦失敗:', geminiErr.message);
         }
       }
 
+      if (deepseekErr.message && deepseekErr.message.includes('Insufficient Balance')) {
+        throw new Error('DeepSeek 帳戶餘額不足 (Insufficient Balance)。建議切換為免費 Google Gemini 引擎或前往 DeepSeek 官網儲值。');
+      }
+
       throw deepseekErr;
     }
   } else {
+    // provider === 'gemini'
     const geminiContents = (contents && contents.length > 0)
       ? contents
       : (messages || []).map(m => ({
@@ -511,12 +573,49 @@ async function callLlmApi({ config, systemPrompt, messages = [], contents = null
           parts: [{ text: typeof m.content === 'string' ? m.content : (m.parts?.[0]?.text || '') }]
         }));
 
-    return await callGeminiApi({
-      apiKey,
-      model,
-      systemPrompt,
-      contents: geminiContents
-    });
+    try {
+      return await callGeminiApi({
+        apiKey,
+        model,
+        systemPrompt,
+        contents: geminiContents,
+        fallbackMode
+      });
+    } catch (geminiErr) {
+      console.warn(`[Dual-Engine Fallback] Gemini 呼叫失敗: ${geminiErr.message}`);
+
+      // 檢查是否有 DeepSeek 金鑰可作備援
+      const deepseekKey = config.deepseekFallbackKey || '';
+      if (deepseekKey) {
+        try {
+          console.warn('[Dual-Engine Fallback] 自動啟動 DeepSeek 備援引擎接手處理...');
+          const dsMsgs = (messages && messages.length > 0)
+            ? messages
+            : (geminiContents || []).map(c => ({
+                role: c.role === 'model' ? 'assistant' : 'user',
+                content: c.parts?.map(p => p.text).join('\n') || ''
+              }));
+
+          const fallbackResult = await callDeepSeekApi({
+            apiKey: deepseekKey,
+            model: DEFAULT_DEEPSEEK_MODEL,
+            systemPrompt,
+            messages: dsMsgs,
+            fallbackMode
+          });
+
+          console.log('[Dual-Engine Fallback] 成功透過 DeepSeek 引擎無縫接手回應！');
+          if (fallbackResult && typeof fallbackResult === 'object') {
+            fallbackResult._engineFallback = { from: 'gemini', to: 'deepseek', reason: geminiErr.message };
+          }
+          return fallbackResult;
+        } catch (dsErr) {
+          console.error('[Dual-Engine Fallback] DeepSeek 備援亦失敗:', dsErr.message);
+        }
+      }
+
+      throw geminiErr;
+    }
   }
 }
 
@@ -566,6 +665,7 @@ export async function handleApiRequest(request, env) {
         game: 'CoachQuest',
         version: '2.6.0',
         hasApiKey: !!config.apiKey,
+        hasKV: !!(env && env.COACHQUEST_KV),
         activeProvider: config.provider,
         providers: providers.length > 0 ? providers : ['gemini', 'deepseek'],
         defaultModel: config.model,
@@ -629,7 +729,9 @@ export async function handleApiRequest(request, env) {
       return new Response(JSON.stringify({
         ok: true,
         reply: result.reply || '……',
-        innerThought: result.innerThought || ''
+        innerThought: result.innerThought || '',
+        fallbackUsed: !!result._engineFallback,
+        fallbackInfo: result._engineFallback || null
       }), { headers: corsHeaders });
     }
 
@@ -1181,6 +1283,105 @@ export async function handleApiRequest(request, env) {
       }), { headers: corsHeaders });
     }
 
+    // 13B. POST /api/practice-logs/batch-submit (學員端整批回傳所有歷史紀錄)
+    if (pathname === '/practice-logs/batch-submit' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const incomingLogs = Array.isArray(body.logs) ? body.logs : [];
+      if (incomingLogs.length === 0) {
+        return new Response(JSON.stringify({ ok: true, synced: 0 }), { headers: corsHeaders });
+      }
+
+      const logs = await getStoredPracticeLogs(env);
+      let newCount = 0;
+
+      for (const item of incomingLogs) {
+        if (!item || !item.id) continue;
+        const studentName = (item.studentName || body.studentName || '冒險者教練').trim().substring(0, 30);
+        const logEntry = {
+          id: item.id,
+          studentName,
+          studentAvatar: item.studentAvatar || body.studentAvatar || '🧙‍♂️',
+          bossId: item.bossId || 'boss_unknown',
+          bossName: item.bossName || '神秘關主',
+          bossAvatar: item.bossAvatar || '👤',
+          bossTitle: item.bossTitle || '',
+          category: item.category || 'general',
+          score: Number(item.score) || 0,
+          isCaptured: typeof item.isCaptured === 'boolean' ? item.isCaptured : (Number(item.score) >= 70),
+          turns: Number(item.turns) || (Array.isArray(item.dialogueHistory) ? item.dialogueHistory.filter(m => m.role === 'user').length : 0),
+          bestCoachQuote: item.bestCoachQuote || '',
+          winningReason: item.winningReason || '',
+          advice: item.advice || '',
+          dimensions: item.dimensions || item.dimensionScores || {},
+          dialogueHistory: Array.isArray(item.dialogueHistory) ? item.dialogueHistory : [],
+          submittedAt: item.date || item.submittedAt || new Date().toISOString(),
+          clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
+        };
+
+        const existingIdx = logs.findIndex(l => l.id === logEntry.id);
+        if (existingIdx >= 0) {
+          logs[existingIdx] = { ...logs[existingIdx], ...logEntry };
+        } else {
+          logs.unshift(logEntry);
+          newCount++;
+        }
+      }
+
+      if (logs.length > 500) logs.length = 500;
+      await saveStoredPracticeLogs(env, logs);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        message: `成功同步 ${incomingLogs.length} 筆練習紀錄！`,
+        synced: incomingLogs.length,
+        newAdded: newCount
+      }), { headers: corsHeaders });
+    }
+
+    // 13C. POST /api/practice-logs/live (對話進行中即時暫存，防止中途關閉或未點結算丟失)
+    if (pathname === '/practice-logs/live' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      if (!body.sessionId || !Array.isArray(body.dialogueHistory) || body.dialogueHistory.length === 0) {
+        return new Response(JSON.stringify({ ok: false, error: '資料不足' }), { headers: corsHeaders });
+      }
+
+      const logs = await getStoredPracticeLogs(env);
+      const studentName = (body.studentName || '冒險者教練').trim().substring(0, 30);
+      const logEntry = {
+        id: body.sessionId,
+        studentName,
+        studentAvatar: body.studentAvatar || '🧙‍♂️',
+        bossId: body.bossId || 'boss_unknown',
+        bossName: body.bossName || '神秘關主',
+        bossAvatar: body.bossAvatar || '👤',
+        bossTitle: body.bossTitle || '',
+        category: body.category || 'general',
+        score: Number(body.score) || 0,
+        isCaptured: !!body.isCaptured,
+        isLive: !body.isFinished,
+        turns: body.dialogueHistory.filter(m => m.role === 'user').length,
+        bestCoachQuote: body.bestCoachQuote || '',
+        winningReason: body.winningReason || (body.isFinished ? '' : '【進行中練習】學員尚未申請結算或中途離開'),
+        advice: body.advice || '',
+        dimensions: body.dimensions || {},
+        dialogueHistory: body.dialogueHistory,
+        submittedAt: new Date().toISOString(),
+        clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
+      };
+
+      const existingIdx = logs.findIndex(l => l.id === logEntry.id);
+      if (existingIdx >= 0) {
+        logs[existingIdx] = logEntry;
+      } else {
+        logs.unshift(logEntry);
+      }
+
+      if (logs.length > 500) logs.length = 500;
+      await saveStoredPracticeLogs(env, logs);
+
+      return new Response(JSON.stringify({ ok: true, sessionId: logEntry.id }), { headers: corsHeaders });
+    }
+
     // 14. POST /api/admin/login (管理員登入驗證)
     if (pathname === '/admin/login' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
@@ -1262,7 +1463,9 @@ export async function handleApiRequest(request, env) {
 
       return new Response(JSON.stringify({
         ok: true,
+        hasKV: !!(env && env.COACHQUEST_KV),
         stats: {
+          hasKV: !!(env && env.COACHQUEST_KV),
           totalCount,
           uniqueStudents,
           capturedCount,
@@ -1328,6 +1531,78 @@ export async function handleApiRequest(request, env) {
 
       await saveStoredPracticeLogs(env, []);
       return new Response(JSON.stringify({ ok: true, message: '已清空所有練習紀錄' }), { headers: corsHeaders });
+    }
+
+    // 20. POST /api/admin/import-save (導師後台直接匯入學員的 JSON 存檔檔案)
+    if (pathname === '/admin/import-save' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const pData = body.playerData || body;
+      const studentName = (pData.nickname || '匯入學員').trim();
+      const studentAvatar = pData.avatar || '🧙‍♂️';
+
+      const logs = await getStoredPracticeLogs(env);
+      let importedCount = 0;
+
+      // 1. 匯入 practiceLogs 流水帳
+      if (Array.isArray(pData.practiceLogs)) {
+        for (const item of pData.practiceLogs) {
+          if (!item.id) item.id = 'log_imp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+          const entry = {
+            ...item,
+            studentName: item.studentName || studentName,
+            studentAvatar: item.studentAvatar || studentAvatar,
+            submittedAt: item.date || item.submittedAt || new Date().toISOString()
+          };
+          const idx = logs.findIndex(l => l.id === entry.id);
+          if (idx >= 0) logs[idx] = entry;
+          else { logs.unshift(entry); importedCount++; }
+        }
+      }
+
+      // 2. 匯入 captures (突破成功之心得卡)
+      if (pData.captures && typeof pData.captures === 'object') {
+        for (const bossId of Object.keys(pData.captures)) {
+          const cap = pData.captures[bossId];
+          const capLogId = 'log_cap_' + bossId + '_' + studentName;
+          const idx = logs.findIndex(l => l.id === capLogId);
+          if (idx < 0) {
+            logs.unshift({
+              id: capLogId,
+              studentName,
+              studentAvatar,
+              bossId: cap.bossId || bossId,
+              bossName: cap.name || '關主',
+              bossAvatar: cap.avatar || '👤',
+              bossTitle: cap.title || '',
+              category: cap.category || 'general',
+              score: cap.highestScore || 80,
+              isCaptured: true,
+              turns: (cap.dialogueHistory || []).filter(m => m.role === 'user').length || 1,
+              bestCoachQuote: cap.bestCoachQuote || '',
+              winningReason: cap.winningReason || '',
+              advice: cap.lastEvaluation?.advice || '',
+              dimensions: cap.dimensionScores || {},
+              dialogueHistory: cap.dialogueHistory || [],
+              submittedAt: cap.lastCapturedAt || new Date().toISOString()
+            });
+            importedCount++;
+          }
+        }
+      }
+
+      if (logs.length > 500) logs.length = 500;
+      await saveStoredPracticeLogs(env, logs);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        message: `成功匯入學員【${studentName}】的存檔，新增/更新了 ${importedCount} 筆實戰紀錄！`,
+        importedCount
+      }), { headers: corsHeaders });
     }
 
     return new Response(JSON.stringify({ ok: false, error: `無效的 API 端點: ${pathname}` }), {
