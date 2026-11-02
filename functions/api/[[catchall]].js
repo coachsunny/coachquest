@@ -663,7 +663,7 @@ export async function handleApiRequest(request, env) {
       return new Response(JSON.stringify({
         ok: true,
         game: 'CoachQuest',
-        version: '2.6.0',
+        version: '2.6.2',
         hasApiKey: !!config.apiKey,
         hasKV: !!(env && env.COACHQUEST_KV),
         activeProvider: config.provider,
