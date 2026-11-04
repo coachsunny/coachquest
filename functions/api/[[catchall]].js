@@ -790,6 +790,35 @@ export async function handleApiRequest(request, env) {
       const score = Number(evaluation.score) || 0;
       const isCaptured = score >= 70;
 
+      // 提取或智慧合成每回合提問示範建議 (Better Phrasing & Rationale)
+      let turnSuggestions = Array.isArray(evaluation.turnSuggestions) ? evaluation.turnSuggestions : [];
+      if (turnSuggestions.length === 0) {
+        const userMessages = messages.filter(m => m.role === 'user');
+        turnSuggestions = userMessages.map((m, idx) => {
+          const content = typeof m.content === 'string' ? m.content : '';
+          let phrasing = '';
+          let rationale = '';
+
+          if (content.includes('？') || content.includes('?')) {
+            phrasing = `「聽起來這件事的進展對你而言非常關鍵，是什麼原因讓你特別重視這部分呢？」`;
+            rationale = `運用有力開放式提問啟發深層反思，核對對方真正在乎的內在價值。`;
+          } else if (content.includes('壓力') || content.includes('累') || content.includes('生氣') || content.includes('難過')) {
+            phrasing = `「我能感受到這段時間你承受了相當巨大的壓力與不易，此時此刻你最希望得到什麼樣的理解或支持？」`;
+            rationale = `先接納情緒與心理負荷，建立全然的心理安全感，避免過早切入就事論事。`;
+          } else {
+            phrasing = `「謝謝你願意跟我說這些，聽起來你非常渴望能被公平對待並突破現狀，是這樣嗎？」`;
+            rationale = `懸置批判與自我建議，以【${framework.name}】心法同理對方內心未被滿足的核心渴望。`;
+          }
+
+          return {
+            turn: idx + 1,
+            userOriginal: content,
+            betterPhrasing: phrasing,
+            rationale: rationale
+          };
+        });
+      }
+
       return new Response(JSON.stringify({
         ok: true,
         evaluation: {
@@ -798,7 +827,8 @@ export async function handleApiRequest(request, env) {
           winningReason: evaluation.winningReason || (isCaptured ? '深度同理突破了防備' : '防線尚未完全卸下'),
           bestCoachQuote: evaluation.bestCoachQuote || '你的傾聽給予了對方極大的安全感。',
           dimensions: evaluation.dimensions || { empathy: 75, listening: 75, questioning: 70, reframing: 70, action_drive: 65 },
-          advice: evaluation.advice || '持續維持開放好奇的態度進行深入提問。'
+          advice: evaluation.advice || '持續維持開放好奇的態度進行深入提問。',
+          turnSuggestions
         }
       }), { headers: corsHeaders });
     }
@@ -1258,6 +1288,7 @@ export async function handleApiRequest(request, env) {
         winningReason,
         advice,
         dimensions,
+        turnSuggestions: Array.isArray(payload.turnSuggestions) ? payload.turnSuggestions : [],
         dialogueHistory,
         submittedAt: new Date().toISOString(),
         clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
@@ -1314,6 +1345,7 @@ export async function handleApiRequest(request, env) {
           winningReason: item.winningReason || '',
           advice: item.advice || '',
           dimensions: item.dimensions || item.dimensionScores || {},
+          turnSuggestions: Array.isArray(item.turnSuggestions) ? item.turnSuggestions : [],
           dialogueHistory: Array.isArray(item.dialogueHistory) ? item.dialogueHistory : [],
           submittedAt: item.date || item.submittedAt || new Date().toISOString(),
           clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
@@ -1336,6 +1368,22 @@ export async function handleApiRequest(request, env) {
         message: `成功同步 ${incomingLogs.length} 筆練習紀錄！`,
         synced: incomingLogs.length,
         newAdded: newCount
+      }), { headers: corsHeaders });
+    }
+
+    // 13B2. GET /api/practice-logs/student (學員依暱稱取得個人雲端歷史紀錄)
+    if (pathname === '/practice-logs/student' && request.method === 'GET') {
+      const studentName = (url.searchParams.get('name') || '').trim();
+      if (!studentName) {
+        return new Response(JSON.stringify({ ok: true, logs: [] }), { headers: corsHeaders });
+      }
+      const allLogs = await getStoredPracticeLogs(env);
+      const studentLogs = allLogs.filter(l => (l.studentName === studentName || l.playerName === studentName));
+      return new Response(JSON.stringify({
+        ok: true,
+        studentName,
+        total: studentLogs.length,
+        logs: studentLogs
       }), { headers: corsHeaders });
     }
 

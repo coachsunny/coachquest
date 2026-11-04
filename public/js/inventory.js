@@ -153,12 +153,13 @@ export const InventoryManager = {
         bestCoachQuote: evaluation.bestCoachQuote || (existing ? existing.bestCoachQuote : ''),
         winningReason: evaluation.winningReason || (existing ? existing.winningReason : ''),
         dimensionScores: evaluation.dimensions || (existing ? existing.dimensionScores : {}),
+        turnSuggestions: evaluation.turnSuggestions || (existing ? existing.turnSuggestions : []),
         dialogueHistory: cleanDialogue.length > 0 ? cleanDialogue : (existing?.dialogueHistory || []),
         lastEvaluation: evaluation
       };
     }
 
-    // 永久儲存至對話練習紀錄流水帳 (保留最近 30 筆，避免 localStorage 超限)
+    // 永久儲存至對話練習紀錄流水帳 (保留最近 50 筆)
     if (!Array.isArray(data.practiceLogs)) {
       data.practiceLogs = [];
     }
@@ -178,12 +179,13 @@ export const InventoryManager = {
       winningReason: evaluation.winningReason || '',
       dimensionScores: evaluation.dimensions || {},
       advice: evaluation.advice || '',
+      turnSuggestions: evaluation.turnSuggestions || [],
       dialogueHistory: cleanDialogue
     };
 
     data.practiceLogs.unshift(logEntry);
-    if (data.practiceLogs.length > 30) {
-      data.practiceLogs = data.practiceLogs.slice(0, 30);
+    if (data.practiceLogs.length > 50) {
+      data.practiceLogs = data.practiceLogs.slice(0, 50);
     }
 
     this.savePlayerData(data);
@@ -220,6 +222,44 @@ export const InventoryManager = {
       data.practiceLogs = data.practiceLogs.filter(l => l.id !== id);
       this.savePlayerData(data);
     }
+  },
+
+  // 智慧合併雲端歷史練習紀錄（跨裝置還原）
+  mergeCloudPracticeLogs(cloudLogs) {
+    if (!Array.isArray(cloudLogs) || cloudLogs.length === 0) return 0;
+    const data = this.getPlayerData();
+    if (!Array.isArray(data.practiceLogs)) data.practiceLogs = [];
+    let addedCount = 0;
+    for (const cLog of cloudLogs) {
+      const exists = data.practiceLogs.some(l => l.id === cLog.id || (l.date === cLog.submittedAt && l.bossId === cLog.bossId));
+      if (!exists) {
+        data.practiceLogs.push({
+          id: cLog.id || ('log_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
+          bossId: cLog.bossId,
+          bossName: cLog.bossName,
+          bossAvatar: cLog.bossAvatar,
+          bossTitle: cLog.bossTitle,
+          category: cLog.category,
+          date: cLog.submittedAt || new Date().toISOString(),
+          score: cLog.score || 0,
+          isCaptured: cLog.isCaptured,
+          turns: cLog.turns || (cLog.dialogueHistory?.filter(m => m.role === 'user').length || 1),
+          bestCoachQuote: cLog.bestCoachQuote || '',
+          winningReason: cLog.winningReason || '',
+          dimensionScores: cLog.dimensions || {},
+          advice: cLog.advice || '',
+          turnSuggestions: cLog.turnSuggestions || [],
+          dialogueHistory: cLog.dialogueHistory || []
+        });
+        addedCount++;
+      }
+    }
+    data.practiceLogs.sort((a, b) => new Date(b.date) - new Date(a.date));
+    if (data.practiceLogs.length > 50) {
+      data.practiceLogs = data.practiceLogs.slice(0, 50);
+    }
+    this.savePlayerData(data);
+    return addedCount;
   },
 
   // 判斷關主是否已被收攏

@@ -24,6 +24,7 @@ const state = {
   currentViewingBossId: null,
   currentViewingLogId: null,
   currentBattleSessionId: null,
+  lastFinishedLogId: null,
 
   // 多人對戰狀態
   isMultiplayer: false,
@@ -111,16 +112,30 @@ function initElements() {
     btnEvalRetry: document.getElementById('btnEvalRetry'),
     btnEvalSubmitBoard: document.getElementById('btnEvalSubmitBoard'),
     btnEvalDownloadReport: document.getElementById('btnEvalDownloadReport'),
+    btnEvalViewVisualReport: document.getElementById('btnEvalViewVisualReport'),
+    btnEvalCopyTranscript: document.getElementById('btnEvalCopyTranscript'),
+    btnEvalDownloadHtml: document.getElementById('btnEvalDownloadHtml'),
     btnDownloadBossCardReport: document.getElementById('btnDownloadBossCardReport'),
 
     // Modals
+    btnNavPracticeLogs: document.getElementById('btnNavPracticeLogs'),
+    navPracticeLogCount: document.getElementById('navPracticeLogCount'),
+    modalPracticeLogsList: document.getElementById('modalPracticeLogsList'),
+    practiceLogsTotalBadge: document.getElementById('practiceLogsTotalBadge'),
+    summaryPracticeTotal: document.getElementById('summaryPracticeTotal'),
+    summaryPracticeCaptured: document.getElementById('summaryPracticeCaptured'),
+    summaryPracticeAvg: document.getElementById('summaryPracticeAvg'),
+    practiceLogsListContainer: document.getElementById('practiceLogsListContainer'),
+    btnSyncCloudLogs: document.getElementById('btnSyncCloudLogs'),
     modalInventory: document.getElementById('modalInventory'),
     modalLeaderboard: document.getElementById('modalLeaderboard'),
     modalSettings: document.getElementById('modalSettings'),
+    selectTurnMode: document.getElementById('selectTurnMode'),
     modalBossDetail: document.getElementById('modalBossDetail'),
     modalPracticeLogDetail: document.getElementById('modalPracticeLogDetail'),
     practiceLogDetailContent: document.getElementById('practiceLogDetailContent'),
     btnDownloadPracticeLogReport: document.getElementById('btnDownloadPracticeLogReport'),
+    btnDownloadPracticeLogHtml: document.getElementById('btnDownloadPracticeLogHtml'),
     btnCopyPracticeLogText: document.getElementById('btnCopyPracticeLogText'),
     modalMultiplayer: document.getElementById('modalMultiplayer'),
 
@@ -202,6 +217,7 @@ export function initApp() {
     renderCategoryTabs();
     renderBossGrid();
     checkApiStatus();
+    updatePracticeLogsNavBadge();
     autoSyncLocalPracticeLogsToBackend();
 
     // 首次進入時啟動起程註冊設定
@@ -219,10 +235,12 @@ export function initApp() {
 function bindEvents() {
   // 導航列按鈕
   document.getElementById('btnNavMultiplayer')?.addEventListener('click', () => openMultiplayerModal());
+  document.getElementById('btnNavPracticeLogs')?.addEventListener('click', () => openPracticeLogsListModal());
   document.getElementById('btnNavPokedex')?.addEventListener('click', () => openInventoryModal());
   document.getElementById('btnNavLeaderboard')?.addEventListener('click', () => openLeaderboardModal());
   document.getElementById('btnNavSettings')?.addEventListener('click', () => openSettingsModal());
   document.getElementById('playerHud')?.addEventListener('click', () => openSettingsModal());
+  elements.btnSyncCloudLogs?.addEventListener('click', () => handleSyncCloudLogs());
 
   // 關閉 Modal 按鈕
   document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -285,9 +303,20 @@ function bindEvents() {
     }
   });
   elements.btnEvalSubmitBoard?.addEventListener('click', () => handleSubmitScoreToLeaderboard());
+  elements.btnEvalViewVisualReport?.addEventListener('click', () => {
+    if (state.lastFinishedLogId) {
+      openPracticeLogModal(state.lastFinishedLogId);
+    } else {
+      const logs = InventoryManager.getPracticeLogs();
+      if (logs.length > 0) openPracticeLogModal(logs[0].id);
+    }
+  });
+  elements.btnEvalCopyTranscript?.addEventListener('click', () => handleCopyPracticeLogText(state.lastFinishedLogId));
+  elements.btnEvalDownloadHtml?.addEventListener('click', () => exportPracticeLogHtml(state.lastFinishedLogId));
   elements.btnEvalDownloadReport?.addEventListener('click', () => handleDownloadReport());
   elements.btnDownloadBossCardReport?.addEventListener('click', () => handleDownloadBossCardReport());
   elements.btnDownloadPracticeLogReport?.addEventListener('click', () => handleDownloadPracticeLogReport());
+  elements.btnDownloadPracticeLogHtml?.addEventListener('click', () => exportPracticeLogHtml(state.currentViewingLogId));
   elements.btnCopyPracticeLogText?.addEventListener('click', () => handleCopyPracticeLogText());
 
   // 設定儲存
@@ -1026,8 +1055,13 @@ async function handleSendMessage(overrideText = null) {
       });
     }
 
-    if (state.turnCount > state.maxTurns) {
-      showSystemToast(LangManager.t('已達最大回合數！關主心防已大幅鬆動，現在是收攏的最佳時機！'));
+    const turnMode = localStorage.getItem('coachquest_turn_mode') || 'free';
+    if (turnMode === '8' && state.turnCount > 8) {
+      showSystemToast(LangManager.t('已達 8 回合敏捷目標！關主心防已大幅鬆動，隨時可申請結算收攏！'));
+    } else if (turnMode === '15' && state.turnCount > 15) {
+      showSystemToast(LangManager.t('已達 15 回合深度會談目標！隨時可點擊「申請結算收攏」！'));
+    } else if (state.turnCount === 6) {
+      showSystemToast(LangManager.t('💡 關主心防已逐步動搖！隨時可點擊右上角「申請結算」，亦可繼續暢聊探索！'), 4500);
     }
 
   } catch (err) {
@@ -1243,7 +1277,14 @@ function updateBattleHp(hp) {
 
 function updateTurnBadge() {
   if (elements.battleTurnBadge) {
-    elements.battleTurnBadge.textContent = `第 ${state.turnCount} / ${state.maxTurns} 回合`;
+    const mode = localStorage.getItem('coachquest_turn_mode') || 'free';
+    if (mode === '8') {
+      elements.battleTurnBadge.textContent = LangManager.t(`第 ${state.turnCount} / 8 回合`);
+    } else if (mode === '15') {
+      elements.battleTurnBadge.textContent = LangManager.t(`第 ${state.turnCount} / 15 回合`);
+    } else {
+      elements.battleTurnBadge.textContent = LangManager.t(`第 ${state.turnCount} 回合 (不限回數)`);
+    }
   }
   if (elements.btnCapture) {
     elements.btnCapture.disabled = state.dialogueHistory.length < 3;
@@ -1334,6 +1375,8 @@ function renderEvaluationView(evalData) {
   const isCaptured = score >= 70;
 
   const battleResult = InventoryManager.recordBattleResult(boss, evalData, state.dialogueHistory);
+  state.lastFinishedLogId = battleResult.logId;
+  updatePracticeLogsNavBadge();
   // 自動非同步上傳實戰練習對話與 ICF 分析至後台雲端
   syncPracticeLogToBackend(boss, evalData, state.dialogueHistory, battleResult.logId);
 
@@ -1500,7 +1543,8 @@ function handleDownloadReport() {
 
   md += `---\n\n`;
 
-  md += `## 📜 完整對決對話實錄 (Dialogue Transcript)\n\n`;
+  md += `## 📜 完整對決對話實錄與大師級示範 (Dialogue Transcript & Coaching Suggestions)\n\n`;
+  const suggMap = getTurnSuggestionsMap(evaluation);
   if (state.dialogueHistory && state.dialogueHistory.length > 0) {
     let roundIndex = 1;
     for (let i = 0; i < state.dialogueHistory.length; i++) {
@@ -1508,6 +1552,15 @@ function handleDownloadReport() {
       if (msg.role === 'user') {
         md += `### 🔹 回合 ${roundIndex} · 教練提問\n`;
         md += `**${player.avatar} ${player.nickname}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+        const sugg = suggMap[roundIndex] || getFallbackSuggestion(msg.content, roundIndex);
+        if (sugg && sugg.betterPhrasing) {
+          md += `> 💡 **ICF 大師級教練示範問句**：\n> 「${sugg.betterPhrasing.replace(/^「|」$/g, '')}」\n>\n`;
+          if (sugg.rationale) {
+            md += `> 🎯 **設計心法與原理**：${sugg.rationale}\n\n`;
+          } else {
+            md += `\n`;
+          }
+        }
         roundIndex++;
       } else {
         md += `**${boss.avatar} ${boss.name}**：\n${msg.content}\n\n`;
@@ -1631,11 +1684,99 @@ function handleDownloadLiveChat() {
   downloadMarkdownFile(md, `CoachQuest_即時對話_${boss.name}_${player.nickname}`);
 }
 
+// ========================================================
+// 輔助函式：提取或合成 ICF 大師級教練每句示範問句與心法
+// ========================================================
+function getTurnSuggestionsMap(logOrEval) {
+  const map = {};
+  if (!logOrEval) return map;
+
+  const rawList = Array.isArray(logOrEval.turnSuggestions)
+    ? logOrEval.turnSuggestions
+    : (logOrEval.evaluation && Array.isArray(logOrEval.evaluation.turnSuggestions)
+        ? logOrEval.evaluation.turnSuggestions
+        : []);
+
+  rawList.forEach((item, idx) => {
+    if (!item) return;
+    const turnKey = Number(item.turn) || (idx + 1);
+    map[turnKey] = {
+      turn: turnKey,
+      userOriginal: item.userOriginal || '',
+      betterPhrasing: item.betterPhrasing || '',
+      rationale: item.rationale || ''
+    };
+  });
+
+  return map;
+}
+
+function getFallbackSuggestion(userContent, turnNum) {
+  const text = (userContent || '').trim();
+  if (text.includes('為什麼') || text.includes('怎么') || text.includes('為何')) {
+    return {
+      turn: turnNum,
+      betterPhrasing: '「聽到你這麼說，我能感受到這對你非常重要。想邀請你聊聊，當這個情況發生時，你心中最在意或渴望的是什麼？」',
+      rationale: 'ICF 提問原則：將質問性質的『為什麼』轉換為中立且安全的『什麼』，引導學員從防衛轉向探索內心最看重的價值。'
+    };
+  }
+  if (!text.includes('？') && !text.includes('?')) {
+    return {
+      turn: turnNum,
+      betterPhrasing: '「我聽見了你在這個過程中的付出與不容易。如果我們退一步來看，這份挑戰背後，你最希望看見什麼樣的轉機？」',
+      rationale: 'ICF 傾聽原則：給予肯定並懸置給建議的衝動，透過強有力開放問句，把思維焦點交還給對方自主探索。'
+    };
+  }
+  if (text.length < 10) {
+    return {
+      turn: turnNum,
+      betterPhrasing: '「請多和我說說那種感覺？如果給這個感受一個名字，它會是什麼？」',
+      rationale: 'ICF 探索原則：透過隱喻與深入追問，引導當事人具象化內在體驗，創造覺察空間。'
+    };
+  }
+  return {
+    turn: turnNum,
+    betterPhrasing: '「這是一個很有深度的切入點。除了剛才提到的，還有哪些可能性或未被注意到的盲點，是如果現在被看見會對你帶來最大突破的？」',
+    rationale: 'ICF 視角重構：擴大對方的覺察範圍，促使當事人跳脫既有慣性框架，看見更廣闊的潛力空間。'
+  };
+}
+
+// 匯出純原生自包含之 HTML 報告檔案 (專為手機學員瀏覽體驗設計，無需任何閱讀器即可直接開啟)
+function downloadHtmlFile(content, baseName) {
+  let downloadTriggered = false;
+  try {
+    const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const cleanName = baseName.replace(/[^\w\u4e00-\u9fa5]/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `${cleanName}_${dateStr}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    downloadTriggered = true;
+  } catch (e) {
+    console.warn('HTML 原生下載失敗:', e);
+  }
+
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Line|MicroMessenger/i.test(navigator.userAgent);
+  if (isMobile) {
+    showSystemToast('🌐 手機網頁版報告已匯出！可直接以手機瀏覽器開啟檢視，排版清晰美觀！');
+  } else {
+    showSystemToast(downloadTriggered ? '🌐 手機網頁版 (.html) 已下載完成！' : '匯出完成');
+  }
+}
+
 // 下載任一次練習紀錄報告 (.md)
-function handleDownloadPracticeLogReport() {
-  const logId = state.currentViewingLogId;
-  if (!logId) return;
-  const log = InventoryManager.getPracticeLogById(logId);
+function handleDownloadPracticeLogReport(targetLogId = null) {
+  const logId = targetLogId || state.currentViewingLogId || state.lastFinishedLogId;
+  let log = logId ? InventoryManager.getPracticeLogById(logId) : null;
+  if (!log) {
+    const logs = InventoryManager.getPracticeLogs();
+    if (logs.length > 0) log = logs[0];
+  }
   if (!log) {
     alert('找不到該場練習紀錄！');
     return;
@@ -1643,11 +1784,12 @@ function handleDownloadPracticeLogReport() {
 
   const player = InventoryManager.getPlayerData();
   const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
-  const isCaptured = log.isCaptured;
+  const isCaptured = log.isCaptured || (Number(log.score) >= 70);
+  const suggMap = getTurnSuggestionsMap(log);
 
   let md = `# 🎮 CoachQuest 教練實戰對話練習復盤報告\n\n`;
   md += `> **練習時間**：${dateStr}\n`;
-  md += `> **關卡對象**：${log.bossAvatar} **${log.bossName}**（${log.bossTitle}）\n`;
+  md += `> **關卡對象**：${log.bossAvatar} **${log.bossName}**（${log.bossTitle || ''}）\n`;
   md += `> **教練學員**：${player.avatar} **${player.nickname}**\n`;
   md += `> **綜合評分**：**${log.score} 分**（${isCaptured ? '🔴 成功突破收攏' : '💨 心防尚未突破'}）\n`;
   md += `> **互動回合**：共 ${log.turns || 1} 回合\n\n`;
@@ -1679,7 +1821,7 @@ function handleDownloadPracticeLogReport() {
     md += `| 行動激發 | **${dims.action_drive || 65} 分** |\n\n`;
   }
 
-  md += `---\n\n## 📜 完整對話練習逐字稿實錄 (Dialogue Transcript)\n\n`;
+  md += `---\n\n## 📜 完整對話練習逐字稿與大師級示範 (Dialogue Transcript & Coaching Suggestions)\n\n`;
   if (log.dialogueHistory && log.dialogueHistory.length > 0) {
     let roundIndex = 1;
     for (let i = 0; i < log.dialogueHistory.length; i++) {
@@ -1687,6 +1829,15 @@ function handleDownloadPracticeLogReport() {
       if (msg.role === 'user') {
         md += `### 🔹 回合 ${roundIndex} · 教練提問\n`;
         md += `**${player.avatar} ${player.nickname}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+        const sugg = suggMap[roundIndex] || getFallbackSuggestion(msg.content, roundIndex);
+        if (sugg && sugg.betterPhrasing) {
+          md += `> 💡 **ICF 大師級示範問句**：\n> 「${sugg.betterPhrasing.replace(/^「|」$/g, '')}」\n>\n`;
+          if (sugg.rationale) {
+            md += `> 🎯 **設計心法與原理**：${sugg.rationale}\n\n`;
+          } else {
+            md += `\n`;
+          }
+        }
         roundIndex++;
       } else {
         md += `**${log.bossAvatar} ${log.bossName}**：\n${msg.content}\n\n`;
@@ -1703,11 +1854,14 @@ function handleDownloadPracticeLogReport() {
   downloadMarkdownFile(md, `CoachQuest_練習復盤_${log.bossName}_${player.nickname}`);
 }
 
-// 複製當前練習紀錄逐字稿全文至剪貼簿 (專為手機無法下載檔案之學員設計)
-function handleCopyPracticeLogText() {
-  const logId = state.currentViewingLogId;
-  if (!logId) return;
-  const log = InventoryManager.getPracticeLogById(logId);
+// 複製當前練習紀錄逐字稿全文至剪貼簿 (專為手機無法下載檔案之學員設計，含大師示範)
+function handleCopyPracticeLogText(targetLogId = null) {
+  const logId = targetLogId || state.currentViewingLogId || state.lastFinishedLogId;
+  let log = logId ? InventoryManager.getPracticeLogById(logId) : null;
+  if (!log) {
+    const logs = InventoryManager.getPracticeLogs();
+    if (logs.length > 0) log = logs[0];
+  }
   if (!log) {
     showSystemToast('找不到該筆對話紀錄');
     return;
@@ -1716,12 +1870,13 @@ function handleCopyPracticeLogText() {
   const player = InventoryManager.getPlayerData();
   const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
   const dims = log.dimensionScores || {};
+  const suggMap = getTurnSuggestionsMap(log);
 
   let text = `【CoachQuest 教練對話實戰練習實錄】\n`;
   text += `學員教練：${player.nickname || '冒險者'} (${player.avatar})\n`;
   text += `對決關主：${log.bossName} (${log.bossTitle || ''})\n`;
   text += `練習時間：${dateStr}\n`;
-  text += `綜合評分：${log.score} 分 (${log.isCaptured ? '成功收攏' : '心防未破'})\n`;
+  text += `綜合評分：${log.score} 分 (${(log.isCaptured || Number(log.score) >= 70) ? '成功收攏' : '心防未破'})\n`;
   text += `互動回合：共 ${log.turns || 1} 回合\n`;
   if (log.bestCoachQuote) text += `\n✨ 破心教練金句：「${log.bestCoachQuote}」\n`;
   if (log.winningReason) text += `🎯 突破關鍵復盤：${log.winningReason}\n`;
@@ -1732,18 +1887,25 @@ function handleCopyPracticeLogText() {
   text += `- 提問引導：${dims.questioning || 70} 分\n`;
   text += `- 視角重構：${dims.reframing || 70} 分\n`;
   text += `- 行動激發：${dims.action_drive || 65} 分\n`;
-  text += `\n📜 完整對話練習逐字稿：\n`;
+  text += `\n📜 完整對話逐字稿與大師級示範問句：\n`;
 
   if (log.dialogueHistory && log.dialogueHistory.length > 0) {
     let round = 1;
     for (const msg of log.dialogueHistory) {
       if (msg.role === 'user') {
         text += `\n[回合 ${round}] 教練：\n${msg.content}\n`;
+        const sugg = suggMap[round] || getFallbackSuggestion(msg.content, round);
+        if (sugg && sugg.betterPhrasing) {
+          text += `  💡 大師示範：${sugg.betterPhrasing}\n`;
+          if (sugg.rationale) {
+            text += `  🎯 設計心法：${sugg.rationale}\n`;
+          }
+        }
         round++;
       } else {
-        text += `[關主] ${log.bossName}：\n${msg.content}\n`;
+        text += `\n[關主] ${log.bossName}：\n${msg.content}\n`;
         if (msg.innerThought) {
-          text += `(💭 關主心聲：${msg.innerThought})\n`;
+          text += `  💭 關主心聲：${msg.innerThought}\n`;
         }
       }
     }
@@ -1751,7 +1913,7 @@ function handleCopyPracticeLogText() {
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      showSystemToast('📋 逐字稿全文已複製到剪貼簿！可直接貼至 LINE、微信或備忘錄！');
+      showSystemToast('📋 逐字稿全文與大師示範已複製到剪貼簿！可直接貼至 LINE、微信或備忘錄！');
     }).catch(() => {
       copyFallbackText(text);
     });
@@ -1776,6 +1938,477 @@ function copyFallbackText(text) {
   document.body.removeChild(ta);
 }
 
+// 匯出自包含且具備優美排版的手機網頁報告 (.html)
+function exportPracticeLogHtml(targetLogId = null) {
+  const logId = targetLogId || state.currentViewingLogId || state.lastFinishedLogId;
+  let log = logId ? InventoryManager.getPracticeLogById(logId) : null;
+  if (!log) {
+    const logs = InventoryManager.getPracticeLogs();
+    if (logs.length > 0) log = logs[0];
+  }
+  if (!log) {
+    showSystemToast('找不到該筆對話紀錄');
+    return;
+  }
+
+  const player = InventoryManager.getPlayerData();
+  const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
+  const isCaptured = log.isCaptured || (Number(log.score) >= 70);
+  const dims = log.dimensionScores || {};
+  const suggMap = getTurnSuggestionsMap(log);
+
+  let dialogueHtml = '';
+  if (log.dialogueHistory && log.dialogueHistory.length > 0) {
+    let roundIndex = 1;
+    dialogueHtml = log.dialogueHistory.map(msg => {
+      if (msg.role === 'user') {
+        const sugg = suggMap[roundIndex] || getFallbackSuggestion(msg.content, roundIndex);
+        const itemHtml = `
+          <div class="chat-turn user-turn">
+            <div class="turn-meta">${escapeHtml(player.avatar || '🧙‍♂️')} <b>${escapeHtml(player.nickname || '學員教練')}</b> · 第 ${roundIndex} 回合</div>
+            <div class="turn-bubble user-bubble">${escapeHtml(msg.content)}</div>
+            ${sugg ? `
+              <div class="suggestion-card">
+                <div class="sugg-badge">💡 ICF 大師級示範問句</div>
+                <div class="sugg-body">${escapeHtml(sugg.betterPhrasing)}</div>
+                ${sugg.rationale ? `<div class="sugg-sub">🎯 <b>設計原理：</b>${escapeHtml(sugg.rationale)}</div>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+        roundIndex++;
+        return itemHtml;
+      } else {
+        return `
+          <div class="chat-turn boss-turn">
+            <div class="turn-meta">${escapeHtml(log.bossAvatar || '👤')} <b>${escapeHtml(log.bossName || '關主')}</b></div>
+            <div class="turn-bubble boss-bubble">${escapeHtml(msg.content)}</div>
+            ${msg.innerThought ? `<div class="boss-thought">💭 關主心聲：${escapeHtml(msg.innerThought)}</div>` : ''}
+          </div>
+        `;
+      }
+    }).join('');
+  } else {
+    dialogueHtml = '<div style="color:#94a3b8; padding:1rem; text-align:center;">無對話記錄</div>';
+  }
+
+  const fullHtml = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>CoachQuest 教練對話實戰復盤報告 · ${escapeHtml(log.bossName)}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      line-height: 1.6;
+      padding: 12px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .header-banner {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 60%, #4338ca 100%);
+      color: #ffffff;
+      padding: 1.5rem 1.25rem;
+    }
+    .badge-status {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 99px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      background: ${isCaptured ? '#22c55e' : '#f59e0b'};
+      color: #ffffff;
+      margin-bottom: 0.6rem;
+    }
+    .header-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      margin-bottom: 0.3rem;
+    }
+    .header-meta {
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      padding: 1rem 1.25rem;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: center;
+    }
+    .stat-val {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: #4338ca;
+    }
+    .stat-lbl {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    .section {
+      padding: 1.25rem;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .quote-box {
+      background: #fefce8;
+      border-left: 4px solid #eab308;
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-style: italic;
+      color: #854d0e;
+      font-weight: 600;
+    }
+    .text-box {
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      font-size: 0.9rem;
+      color: #334155;
+    }
+    .dim-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.4rem;
+    }
+    .dim-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #f8fafc;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    .dim-val {
+      font-weight: 700;
+      color: #4338ca;
+    }
+    .chat-turn {
+      margin-bottom: 1rem;
+    }
+    .turn-meta {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+    }
+    .turn-bubble {
+      padding: 0.75rem 0.9rem;
+      border-radius: 12px;
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+    .user-bubble {
+      background: #ecfdf5;
+      border-left: 4px solid #10b981;
+      color: #064e3b;
+    }
+    .boss-bubble {
+      background: #f8fafc;
+      border-left: 4px solid #6366f1;
+      color: #1e1b4b;
+    }
+    .boss-thought {
+      display: inline-block;
+      margin-top: 0.35rem;
+      background: #fffbeb;
+      border: 1px solid #fef3c7;
+      color: #b45309;
+      padding: 0.3rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+    }
+    .suggestion-card {
+      margin-top: 0.45rem;
+      background: #fffdf5;
+      border: 1px solid #fde68a;
+      border-left: 4px solid #f59e0b;
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+    }
+    .sugg-badge {
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #b45309;
+      margin-bottom: 0.25rem;
+    }
+    .sugg-body {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #78350f;
+      line-height: 1.45;
+      margin-bottom: 0.25rem;
+    }
+    .sugg-sub {
+      font-size: 0.78rem;
+      color: #92400e;
+      line-height: 1.4;
+      opacity: 0.9;
+    }
+    .footer {
+      padding: 1.25rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: #94a3b8;
+      background: #f8fafc;
+    }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .container { box-shadow: none; max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-banner">
+      <span class="badge-status">${isCaptured ? '🎉 成功收攏突破' : '💨 心防尚未突破'}</span>
+      <h1 class="header-title">${escapeHtml(log.bossAvatar || '👤')} ${escapeHtml(log.bossName || '關主')} · ${escapeHtml(log.bossTitle || '')}</h1>
+      <div class="header-meta">
+        學員教練：${escapeHtml(player.avatar || '🧙‍♂️')} ${escapeHtml(player.nickname || '冒險者')} ｜ 練習時間：${dateStr}
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <div>
+        <div class="stat-val">${log.score || 0} 分</div>
+        <div class="stat-lbl">綜合評分</div>
+      </div>
+      <div>
+        <div class="stat-val">${log.turns || 1} 回合</div>
+        <div class="stat-lbl">對話輪數</div>
+      </div>
+      <div>
+        <div class="stat-val">${isCaptured ? '已通關' : '待精進'}</div>
+        <div class="stat-lbl">闖關成果</div>
+      </div>
+    </div>
+
+    ${log.bestCoachQuote ? `
+      <div class="section">
+        <div class="section-title">✨ 最精彩的教練金句</div>
+        <div class="quote-box">「${escapeHtml(log.bestCoachQuote)}」</div>
+      </div>
+    ` : ''}
+
+    ${log.winningReason ? `
+      <div class="section">
+        <div class="section-title">🎯 突破防線關鍵復盤</div>
+        <div class="text-box">${escapeHtml(log.winningReason)}</div>
+      </div>
+    ` : ''}
+
+    ${log.advice ? `
+      <div class="section">
+        <div class="section-title">💡 專家指導與調整建議</div>
+        <div class="text-box">${escapeHtml(log.advice)}</div>
+      </div>
+    ` : ''}
+
+    <div class="section">
+      <div class="section-title">📊 ICF 教練核心溝通五維度分析</div>
+      <div class="dim-grid">
+        <div class="dim-item"><span>深度同理心</span><span class="dim-val">${dims.empathy || 75} 分</span></div>
+        <div class="dim-item"><span>有效傾聽</span><span class="dim-val">${dims.listening || 75} 分</span></div>
+        <div class="dim-item"><span>提問引導</span><span class="dim-val">${dims.questioning || 70} 分</span></div>
+        <div class="dim-item"><span>視角重構</span><span class="dim-val">${dims.reframing || 70} 分</span></div>
+        <div class="dim-item"><span>行動激發</span><span class="dim-val">${dims.action_drive || 65} 分</span></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">📜 完整對決實錄與大師示範問句 (共 ${log.turns || 1} 回合)</div>
+      <div class="dialogue-list">
+        ${dialogueHtml}
+      </div>
+    </div>
+
+    <div class="footer">
+      CoachQuest (教練大冒險) · 專為教練打造的對話實戰模擬系統<br>
+      https://coachquest.coachsunny.workers.dev
+    </div>
+  </div>
+</body>
+</html>`;
+
+  downloadHtmlFile(fullHtml, `CoachQuest_復盤報告_${log.bossName}_${player.nickname}`);
+}
+
+// 更新導航列紀錄筆數徽章
+function updatePracticeLogsNavBadge() {
+  const logs = InventoryManager.getPracticeLogs();
+  const count = logs ? logs.length : 0;
+  if (elements.navPracticeLogCount) {
+    elements.navPracticeLogCount.textContent = count;
+    elements.navPracticeLogCount.style.display = count > 0 ? 'inline-block' : 'none';
+  }
+  if (elements.practiceLogsTotalBadge) {
+    elements.practiceLogsTotalBadge.textContent = `${count} 筆`;
+  }
+}
+
+// 開啟學員實戰練習紀錄中心 Modal
+function openPracticeLogsListModal() {
+  const logs = InventoryManager.getPracticeLogs();
+  const total = logs.length;
+  const captured = logs.filter(l => l.isCaptured || (Number(l.score) >= 70)).length;
+  const avg = total > 0 ? Math.round(logs.reduce((sum, l) => sum + (Number(l.score) || 0), 0) / total) : 0;
+
+  if (elements.practiceLogsTotalBadge) elements.practiceLogsTotalBadge.textContent = `${total} 筆`;
+  if (elements.summaryPracticeTotal) elements.summaryPracticeTotal.textContent = total;
+  if (elements.summaryPracticeCaptured) elements.summaryPracticeCaptured.textContent = captured;
+  if (elements.summaryPracticeAvg) elements.summaryPracticeAvg.textContent = `${avg} 分`;
+
+  renderPracticeLogsListItems(logs);
+
+  elements.modalPracticeLogsList?.classList.remove('hidden');
+  if (LangManager.getLang() === 'zh-CN' && elements.modalPracticeLogsList) {
+    LangManager.translateDOM(elements.modalPracticeLogsList);
+  }
+}
+
+// 渲染學員練習紀錄列表項目
+function renderPracticeLogsListItems(logs) {
+  const container = elements.practiceLogsListContainer;
+  if (!container) return;
+
+  if (!logs || logs.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 2.5rem 1rem; color: #94a3b8;">
+        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📜</div>
+        <div style="font-weight: 600; color: #475569; margin-bottom: 0.3rem;">目前尚無練習紀錄</div>
+        <p style="font-size: 0.85rem;">前往四大道館選擇關主進行對決，結算後將自動在此留存完整對話與大師示範！</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = logs.map(log => {
+    const isPassed = log.isCaptured || (Number(log.score) >= 70);
+    const dateStr = log.date ? new Date(log.date).toLocaleString('zh-TW', { hour12: false }) : '歷史紀錄';
+    const turns = log.turns || (Array.isArray(log.dialogueHistory) ? log.dialogueHistory.filter(m => m.role === 'user').length : 1);
+    const score = Number(log.score) || 0;
+
+    return `
+      <div class="practice-log-card" data-log-id="${log.id}">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; flex-wrap:wrap; margin-bottom:0.6rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <span style="font-size:1.8rem; line-height:1;">${escapeHtml(log.bossAvatar || '👤')}</span>
+            <div>
+              <div style="font-weight:700; color:#0f172a; font-size:1rem;">
+                ${escapeHtml(log.bossName || '關主')}
+                <span style="font-size:0.75rem; color:#64748b; font-weight:normal; margin-left:0.3rem;">${escapeHtml(log.bossTitle || '')}</span>
+              </div>
+              <div style="font-size:0.75rem; color:#94a3b8;">${dateStr} · 共 ${turns} 回合</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <span style="font-size:1.1rem; font-weight:800; color:${isPassed ? '#16a34a' : '#d97706'};">
+              ${score} 分
+            </span>
+            <span style="font-size:0.72rem; padding:2px 8px; border-radius:99px; font-weight:700; background:${isPassed ? '#dcfce7' : '#fef3c7'}; color:${isPassed ? '#15803d' : '#b45309'};">
+              ${isPassed ? '突破收攏' : '心防未破'}
+            </span>
+          </div>
+        </div>
+
+        ${log.bestCoachQuote ? `
+          <div style="font-size:0.82rem; color:#475569; background:#f8fafc; border-left:3px solid #6366f1; padding:0.4rem 0.6rem; border-radius:4px; margin-bottom:0.7rem; font-style:italic;">
+            「${escapeHtml(log.bestCoachQuote)}」
+          </div>
+        ` : ''}
+
+        <div style="display:flex; justify-content:flex-end; gap:0.4rem; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm btn-view-log" data-id="${log.id}" style="font-size:0.78rem; padding:0.3rem 0.65rem;">
+            👁️ 在線查看
+          </button>
+          <button class="btn btn-outline btn-sm btn-copy-log" data-id="${log.id}" style="font-size:0.78rem; padding:0.3rem 0.65rem; border-color:#059669; color:#059669;">
+            📋 複製逐字稿
+          </button>
+          <button class="btn btn-outline btn-sm btn-html-log" data-id="${log.id}" style="font-size:0.78rem; padding:0.3rem 0.65rem; border-color:#2563eb; color:#2563eb;">
+            🌐 匯出 HTML
+          </button>
+          <button class="btn btn-outline btn-sm btn-md-log" data-id="${log.id}" style="font-size:0.78rem; padding:0.3rem 0.65rem; border-color:#64748b; color:#475569;">
+            📥 MD
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // 綁定卡片按鈕事件
+  container.querySelectorAll('.btn-view-log').forEach(b => {
+    b.addEventListener('click', () => openPracticeLogModal(b.getAttribute('data-id')));
+  });
+  container.querySelectorAll('.btn-copy-log').forEach(b => {
+    b.addEventListener('click', () => handleCopyPracticeLogText(b.getAttribute('data-id')));
+  });
+  container.querySelectorAll('.btn-html-log').forEach(b => {
+    b.addEventListener('click', () => exportPracticeLogHtml(b.getAttribute('data-id')));
+  });
+  container.querySelectorAll('.btn-md-log').forEach(b => {
+    b.addEventListener('click', () => handleDownloadPracticeLogReport(b.getAttribute('data-id')));
+  });
+}
+
+// 學員主動自雲端拉取歷史紀錄並合併至本地
+async function handleSyncCloudLogs() {
+  const player = InventoryManager.getPlayerData();
+  const nickname = (player && player.nickname) ? player.nickname.trim() : '';
+  if (!nickname) {
+    showSystemToast('請先於設定中設置您的學員教練稱號！');
+    return;
+  }
+
+  if (elements.btnSyncCloudLogs) {
+    elements.btnSyncCloudLogs.disabled = true;
+    elements.btnSyncCloudLogs.textContent = '⏳ 同步中...';
+  }
+
+  try {
+    const res = await fetch(`/api/practice-logs/student?name=${encodeURIComponent(nickname)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.logs)) {
+      InventoryManager.mergeCloudPracticeLogs(data.logs);
+      updatePracticeLogsNavBadge();
+      const currentLogs = InventoryManager.getPracticeLogs();
+      renderPracticeLogsListItems(currentLogs);
+      showSystemToast(`☁️ 雲端同步完成！成功載入 ${data.logs.length} 筆歷史實戰紀錄。`);
+    } else {
+      showSystemToast('雲端目前尚無更早的實戰紀錄。');
+    }
+  } catch (err) {
+    console.warn('雲端同步失敗:', err);
+    showSystemToast('雲端同步提醒：暫時無法連線至雲端紀錄庫。');
+  } finally {
+    if (elements.btnSyncCloudLogs) {
+      elements.btnSyncCloudLogs.disabled = false;
+      elements.btnSyncCloudLogs.textContent = '☁️ 同步雲端歷史紀錄';
+    }
+  }
+}
+
 // 自動將實戰練習紀錄非同步同步至雲端後台
 async function syncPracticeLogToBackend(boss, evalData, dialogueHistory, logId) {
   try {
@@ -1797,7 +2430,8 @@ async function syncPracticeLogToBackend(boss, evalData, dialogueHistory, logId) 
       winningReason: evalData.winningReason || '',
       advice: evalData.advice || '',
       dimensions: evalData.dimensions || {},
-      dialogueHistory: cleanDialogue
+      dialogueHistory: cleanDialogue,
+      turnSuggestions: Array.isArray(evalData.turnSuggestions) ? evalData.turnSuggestions : []
     };
 
     const res = await fetch('/api/practice-logs/submit', {
@@ -2115,18 +2749,27 @@ function openPracticeLogModal(logId) {
 
   const player = InventoryManager.getPlayerData();
   const dateStr = new Date(log.date).toLocaleString('zh-TW', { hour12: false });
-  const isCaptured = log.isCaptured;
+  const isCaptured = log.isCaptured || (Number(log.score) >= 70);
   const dims = log.dimensionScores || {};
+  const suggMap = getTurnSuggestionsMap(log);
 
   let dialogueHtml = '';
   if (log.dialogueHistory && log.dialogueHistory.length > 0) {
     let roundIndex = 1;
     dialogueHtml = log.dialogueHistory.map(msg => {
       if (msg.role === 'user') {
+        const sugg = suggMap[roundIndex] || getFallbackSuggestion(msg.content, roundIndex);
         const turnHtml = `
           <div class="modal-chat-turn user-turn">
-            <div class="modal-chat-role">${player.avatar} ${player.nickname}（第 ${roundIndex} 回合）</div>
+            <div class="modal-chat-role">${escapeHtml(player.avatar || '🧙‍♂️')} ${escapeHtml(player.nickname || '學員教練')}（第 ${roundIndex} 回合）</div>
             <div class="modal-chat-text">${escapeHtml(msg.content)}</div>
+            ${sugg ? `
+              <div class="turn-master-suggestion">
+                <div class="sugg-title">💡 ICF 大師級示範問句</div>
+                <div class="sugg-phrasing">${escapeHtml(sugg.betterPhrasing)}</div>
+                ${sugg.rationale ? `<div class="sugg-rationale">🎯 <b>設計心法：</b>${escapeHtml(sugg.rationale)}</div>` : ''}
+              </div>
+            ` : ''}
           </div>
         `;
         roundIndex++;
@@ -2134,7 +2777,7 @@ function openPracticeLogModal(logId) {
       } else {
         return `
           <div class="modal-chat-turn boss-turn">
-            <div class="modal-chat-role">${log.bossAvatar || '👤'} ${escapeHtml(log.bossName || '關主')}</div>
+            <div class="modal-chat-role">${escapeHtml(log.bossAvatar || '👤')} ${escapeHtml(log.bossName || '關主')}</div>
             <div class="modal-chat-text">${escapeHtml(msg.content)}</div>
             ${msg.innerThought ? `<div class="modal-chat-thought">💭 關主心聲：${escapeHtml(msg.innerThought)}</div>` : ''}
           </div>
@@ -2320,6 +2963,7 @@ function openSettingsModal() {
   if (elements.selectAvatar) elements.selectAvatar.value = player.avatar || '🧙‍♂️';
   if (elements.inputApiKey) elements.inputApiKey.value = getSavedApiKey();
   if (elements.selectModel) elements.selectModel.value = getSavedModel();
+  if (elements.selectTurnMode) elements.selectTurnMode.value = localStorage.getItem('coachquest_turn_mode') || 'free';
   if (elements.apiTestResult) elements.apiTestResult.textContent = '';
   if (elements.importResultMsg) elements.importResultMsg.textContent = '';
 
@@ -2334,14 +2978,17 @@ function handleSaveSettings() {
   const newAvatar = elements.selectAvatar?.value;
   const newKey = elements.inputApiKey?.value;
   const newModel = elements.selectModel?.value;
+  const newTurnMode = elements.selectTurnMode?.value;
 
   if (newName) InventoryManager.setNickname(newName);
   if (newAvatar) InventoryManager.setAvatar(newAvatar);
   if (newKey !== undefined) localStorage.setItem('coachquest_custom_api_key', newKey.trim());
   if (newModel) localStorage.setItem('coachquest_custom_model', newModel);
+  if (newTurnMode) localStorage.setItem('coachquest_turn_mode', newTurnMode);
 
   refreshPlayerHud();
   checkApiStatus();
+  updateTurnBadge();
   elements.modalSettings?.classList.add('hidden');
   alert('設定已成功儲存！');
 }

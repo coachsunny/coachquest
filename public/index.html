@@ -44,6 +44,12 @@
         <span class="nav-text">多人約戰</span>
       </button>
 
+      <button class="nav-btn" id="btnNavPracticeLogs" title="查閱自己過去的實戰對話紀錄與覆盤">
+        <span>📋</span>
+        <span class="nav-text">練習紀錄</span>
+        <span class="badge-count" id="navPracticeLogCount" style="display:none; font-size:0.65rem; background:#4f46e5; color:#fff; border-radius:99px; padding:0 5px; margin-left:3px; font-weight:700;"></span>
+      </button>
+
       <button class="nav-btn" id="btnNavPokedex" title="百寶箱圖鑑儀表板">
         <span>🎒</span>
         <span class="nav-text">百寶箱</span>
@@ -143,7 +149,7 @@
             </div>
 
             <div class="battle-turn-counter">
-              <span class="turn-pill" id="battleTurnBadge">第 1 / 8 回合</span>
+              <span class="turn-pill" id="battleTurnBadge">第 1 回合（不限回數）</span>
             </div>
           </div>
         </div>
@@ -276,10 +282,19 @@
           </p>
         </div>
 
-        <!-- 結算操作按鈕列 -->
+        <!-- 結算操作按鈕列 (支援手機在線查閱、一鍵複製與多格式匯出) -->
         <div class="eval-actions">
-          <button class="btn btn-outline" id="btnEvalDownloadReport" style="border-color: #4f46e5; color: #4f46e5; font-weight: 700;">
-            📥 下載教練復盤報告 (.md)
+          <button class="btn btn-primary" id="btnEvalViewVisualReport" style="font-weight: 700; background: #4f46e5;">
+            👁️ 在線查看對話分析報告
+          </button>
+          <button class="btn btn-outline" id="btnEvalCopyTranscript" style="border-color: #059669; color: #059669; font-weight: 700;">
+            📋 一鍵複製逐字稿
+          </button>
+          <button class="btn btn-outline" id="btnEvalDownloadHtml" style="border-color: #2563eb; color: #2563eb; font-weight: 700;">
+            🌐 匯出手機網頁 (.html)
+          </button>
+          <button class="btn btn-outline" id="btnEvalDownloadReport" style="border-color: #64748b; color: #475569; font-weight: 600;">
+            📥 下載 Markdown (.md)
           </button>
           <button class="btn btn-gold" id="btnEvalSubmitBoard">
             🏆 登錄冒險者前 10 排行榜
@@ -358,11 +373,46 @@
     </div>
   </div>
 
+  <!-- ================= 彈窗 2: 學員實戰對話紀錄中心 (Student Practice Logs List) ================= -->
+  <div class="modal-overlay hidden" id="modalPracticeLogsList">
+    <div class="modal-dialog modal-large">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+          <h3>📋 我的實戰對話練習紀錄</h3>
+          <span class="badge" id="practiceLogsTotalBadge" style="background:#e0e7ff; color:#3730a3; font-size:0.75rem; padding:2px 8px; border-radius:99px; font-weight:700;">0 筆</span>
+        </div>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+        <!-- 頂部成效摘要與雲端同步卡 -->
+        <div class="practice-logs-summary-bar" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:0.75rem 1rem; margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
+          <div style="display:flex; gap:1.2rem; font-size:0.85rem; color:#475569; flex-wrap:wrap;">
+            <div>總實戰場次：<b id="summaryPracticeTotal" style="color:#0f172a;">0</b></div>
+            <div>成功突破：<b id="summaryPracticeCaptured" style="color:#16a34a;">0</b></div>
+            <div>平均評分：<b id="summaryPracticeAvg" style="color:#4f46e5;">0 分</b></div>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btnSyncCloudLogs" style="font-size:0.8rem; padding:0.25rem 0.65rem; border-color:#6366f1; color:#4338ca; font-weight:700;">
+            ☁️ 同步雲端歷史紀錄
+          </button>
+        </div>
+        
+        <!-- 紀錄清單容器 -->
+        <div id="practiceLogsListContainer">
+          <!-- 動態載入練習卡片 -->
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+        <span style="font-size:0.8rem; color:#64748b;">💡 手機無需下載 App，點擊「👁️ 在線查看對話分析報告」即可直接閱讀與覆盤！</span>
+        <button class="btn btn-primary btn-sm" data-close-modal>關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= 彈窗 2B: 對話練習紀錄詳情 (Practice Log Detail Modal) ================= -->
   <div class="modal-overlay hidden" id="modalPracticeLogDetail">
     <div class="modal-dialog modal-large">
       <div class="modal-header">
-        <h3>📋 教練對話練習詳細紀錄</h3>
+        <h3>📋 教練對話練習詳細紀錄與深度覆盤</h3>
         <button class="modal-close" data-close-modal>&times;</button>
       </div>
       <div class="modal-body" id="practiceLogDetailContent" style="max-height: 75vh; overflow-y: auto;">
@@ -370,11 +420,14 @@
       </div>
       <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
         <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-          <button class="btn btn-outline btn-sm" id="btnDownloadPracticeLogReport" style="border-color: #4f46e5; color: #4f46e5; font-weight: 700;">
-            📥 下載本場練習報告 (.md)
-          </button>
           <button class="btn btn-outline btn-sm" id="btnCopyPracticeLogText" style="border-color: #059669; color: #059669; font-weight: 700;">
-            📋 複製全文逐字稿
+            📋 複製逐字稿 (含示範)
+          </button>
+          <button class="btn btn-outline btn-sm" id="btnDownloadPracticeLogHtml" style="border-color: #2563eb; color: #2563eb; font-weight: 700;">
+            🌐 匯出手機網頁 (.html)
+          </button>
+          <button class="btn btn-outline btn-sm" id="btnDownloadPracticeLogReport" style="border-color: #64748b; color: #475569; font-weight: 600;">
+            📥 下載 Markdown (.md)
           </button>
         </div>
         <button class="btn btn-primary btn-sm" data-close-modal>關閉</button>
@@ -543,6 +596,16 @@
               <option value="🦊">🦊 敏銳洞察狐</option>
               <option value="🦁">🦁 勇氣領航獅</option>
             </select>
+          </div>
+
+          <div class="form-group">
+            <label for="selectTurnMode">對戰回合目標（自由設定）</label>
+            <select id="selectTurnMode">
+              <option value="free">不限回合（推薦，深入交流隨時自由結算）</option>
+              <option value="15">15 回合（深度會談演練）</option>
+              <option value="8">8 回合（敏捷破冰挑戰）</option>
+            </select>
+            <small class="form-help">真實教練對話重在深度共鳴。預設不限回合，只要你覺得聊得差不多，隨時點擊「申請結算收攏」即可！</small>
           </div>
 
           <div class="form-divider"></div>
