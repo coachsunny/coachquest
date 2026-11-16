@@ -20,20 +20,42 @@ const elements = {
   btnExportAllJson: document.getElementById('btnExportAllJson'),
   btnClearAllLogs: document.getElementById('btnClearAllLogs'),
 
-  // 統計數值
+  // 頂部頁籤與面板
+  tabLogs: document.getElementById('tabLogs'),
+  tabSubscriptions: document.getElementById('tabSubscriptions'),
+  panelLogs: document.getElementById('panelLogs'),
+  panelSubscriptions: document.getElementById('panelSubscriptions'),
+
+  // 統計數值 (對話紀錄)
   statTotalCount: document.getElementById('statTotalCount'),
   statUniqueStudents: document.getElementById('statUniqueStudents'),
   statAvgScore: document.getElementById('statAvgScore'),
   statCapturedRate: document.getElementById('statCapturedRate'),
 
-  // 篩選
+  // 篩選 (對話紀錄)
   filterSearch: document.getElementById('filterSearch'),
   filterBoss: document.getElementById('filterBoss'),
   filterCaptured: document.getElementById('filterCaptured'),
 
-  // 列表
+  // 列表 (對話紀錄)
   logsTableBody: document.getElementById('logsTableBody'),
   logsEmptyState: document.getElementById('logsEmptyState'),
+
+  // 統計數值 (訂閱授權)
+  subStatTotal: document.getElementById('subStatTotal'),
+  subStatActive: document.getElementById('subStatActive'),
+  subStatPermanent: document.getElementById('subStatPermanent'),
+  subStatExpiring: document.getElementById('subStatExpiring'),
+
+  // 篩選與工具 (訂閱授權)
+  filterSubSearch: document.getElementById('filterSubSearch'),
+  filterSubStatus: document.getElementById('filterSubStatus'),
+  btnOpenCreateSubModal: document.getElementById('btnOpenCreateSubModal'),
+  btnExportSubs: document.getElementById('btnExportSubs'),
+
+  // 列表 (訂閱授權)
+  subTableBody: document.getElementById('subTableBody'),
+  subEmptyState: document.getElementById('subEmptyState'),
 
   // 詳情彈窗
   modalLogDetail: document.getElementById('modalLogDetail'),
@@ -43,6 +65,29 @@ const elements = {
   btnCloseDetailModalBottom: document.getElementById('btnCloseDetailModalBottom'),
   btnDownloadDetailMd: document.getElementById('btnDownloadDetailMd'),
   btnCopyDetailText: document.getElementById('btnCopyDetailText'),
+
+  // 訂閱建立彈窗
+  modalCreateSub: document.getElementById('modalCreateSub'),
+  inputCreateSubCode: document.getElementById('inputCreateSubCode'),
+  btnRandomSubCode: document.getElementById('btnRandomSubCode'),
+  inputCreateSubName: document.getElementById('inputCreateSubName'),
+  selectCreateSubType: document.getElementById('selectCreateSubType'),
+  groupCustomDays: document.getElementById('groupCustomDays'),
+  inputCreateSubCustomDays: document.getElementById('inputCreateSubCustomDays'),
+  btnCloseCreateSubModal: document.getElementById('btnCloseCreateSubModal'),
+  btnCancelCreateSub: document.getElementById('btnCancelCreateSub'),
+  btnSubmitCreateSub: document.getElementById('btnSubmitCreateSub'),
+
+  // 訂閱延長/修改彈窗
+  modalEditSub: document.getElementById('modalEditSub'),
+  editSubCodeDisplay: document.getElementById('editSubCodeDisplay'),
+  editSubNameDisplay: document.getElementById('editSubNameDisplay'),
+  editSubStatusDisplay: document.getElementById('editSubStatusDisplay'),
+  inputEditSubName: document.getElementById('inputEditSubName'),
+  selectEditSubStatus: document.getElementById('selectEditSubStatus'),
+  btnCloseEditSubModal: document.getElementById('btnCloseEditSubModal'),
+  btnCancelEditSub: document.getElementById('btnCancelEditSub'),
+  btnSubmitEditSub: document.getElementById('btnSubmitEditSub'),
 
   // KV 橫幅與導引彈窗
   kvWarningBanner: document.getElementById('kvWarningBanner'),
@@ -99,11 +144,33 @@ function initBossOptions() {
 function bindEvents() {
   elements.formAdminLogin?.addEventListener('submit', handleLogin);
   elements.btnLogout?.addEventListener('click', handleLogout);
-  elements.btnRefreshList?.addEventListener('click', () => loadPracticeLogs());
+  elements.btnRefreshList?.addEventListener('click', () => {
+    if (elements.tabSubscriptions?.classList.contains('active')) {
+      loadSubscriptions();
+    } else {
+      loadPracticeLogs();
+    }
+  });
   elements.btnExportAllJson?.addEventListener('click', handleExportAllJson);
   elements.btnClearAllLogs?.addEventListener('click', handleClearAllLogs);
 
-  // 篩選與搜尋
+  // 頂部頁籤切換
+  elements.tabLogs?.addEventListener('click', () => {
+    elements.tabLogs.classList.add('active');
+    elements.tabSubscriptions?.classList.remove('active');
+    elements.panelLogs?.classList.remove('hidden');
+    elements.panelSubscriptions?.classList.add('hidden');
+  });
+
+  elements.tabSubscriptions?.addEventListener('click', () => {
+    elements.tabSubscriptions.classList.add('active');
+    elements.tabLogs?.classList.remove('active');
+    elements.panelSubscriptions?.classList.remove('hidden');
+    elements.panelLogs?.classList.add('hidden');
+    loadSubscriptions();
+  });
+
+  // 對話紀錄篩選與搜尋
   let searchTimer = null;
   elements.filterSearch?.addEventListener('input', () => {
     clearTimeout(searchTimer);
@@ -112,14 +179,53 @@ function bindEvents() {
   elements.filterBoss?.addEventListener('change', () => loadPracticeLogs());
   elements.filterCaptured?.addEventListener('change', () => loadPracticeLogs());
 
-  // 彈窗關閉
+  // 訂閱篩選與搜尋
+  let subSearchTimer = null;
+  elements.filterSubSearch?.addEventListener('input', () => {
+    clearTimeout(subSearchTimer);
+    subSearchTimer = setTimeout(() => loadSubscriptions(), 300);
+  });
+  elements.filterSubStatus?.addEventListener('change', () => loadSubscriptions());
+
+  // 訂閱建立彈窗
+  elements.btnOpenCreateSubModal?.addEventListener('click', openCreateSubModal);
+  elements.btnCloseCreateSubModal?.addEventListener('click', closeCreateSubModal);
+  elements.btnCancelCreateSub?.addEventListener('click', closeCreateSubModal);
+  elements.btnRandomSubCode?.addEventListener('click', generateRandomSubCode);
+  elements.selectCreateSubType?.addEventListener('change', (e) => {
+    if (e.target.value === 'custom_days') {
+      elements.groupCustomDays?.classList.remove('hidden');
+    } else {
+      elements.groupCustomDays?.classList.add('hidden');
+    }
+  });
+  elements.btnSubmitCreateSub?.addEventListener('click', handleCreateSubscription);
+
+  // 訂閱延長/修改彈窗
+  elements.btnCloseEditSubModal?.addEventListener('click', closeEditSubModal);
+  elements.btnCancelEditSub?.addEventListener('click', closeEditSubModal);
+  elements.btnSubmitEditSub?.addEventListener('click', handleEditSubscription);
+
+  // 快速延長按鈕
+  document.querySelectorAll('.btn-quick-extend').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isPerm = btn.getAttribute('data-perm') === 'true';
+      const days = Number(btn.getAttribute('data-days')) || 0;
+      applyQuickExtend(days, isPerm);
+    });
+  });
+
+  // 匯出訂閱名冊
+  elements.btnExportSubs?.addEventListener('click', handleExportSubsJson);
+
+  // 詳情彈窗關閉
   elements.btnCloseDetailModal?.addEventListener('click', closeDetailModal);
   elements.btnCloseDetailModalBottom?.addEventListener('click', closeDetailModal);
   elements.modalLogDetail?.addEventListener('click', (e) => {
     if (e.target === elements.modalLogDetail) closeDetailModal();
   });
 
-  // 彈窗內下載與複製
+  // 詳情彈窗內下載與複製
   elements.btnDownloadDetailMd?.addEventListener('click', () => {
     if (viewingLog) downloadLogMarkdown(viewingLog);
   });
@@ -693,4 +799,406 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ========================================================
+// 訂閱授權碼管理 (Subscription Management Logic)
+// ========================================================
+
+let currentSubscriptions = [];
+let editingSubscription = null;
+
+// 載入訂閱授權碼清單
+async function loadSubscriptions() {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  const search = encodeURIComponent(elements.filterSubSearch?.value.trim() || '');
+  const status = encodeURIComponent(elements.filterSubStatus?.value || 'all');
+
+  try {
+    const res = await fetch(`/api/admin/subscriptions?search=${search}&status=${status}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      if (res.status === 401) {
+        localStorage.removeItem(ADMIN_TOKEN_KEY);
+        showLoginView();
+      }
+      return;
+    }
+
+    // 更新統計指標
+    if (data.stats) {
+      if (elements.subStatTotal) elements.subStatTotal.textContent = data.stats.totalCount || 0;
+      if (elements.subStatActive) elements.subStatActive.textContent = data.stats.activeCount || 0;
+      if (elements.subStatPermanent) elements.subStatPermanent.textContent = data.stats.permanentCount || 0;
+      if (elements.subStatExpiring) elements.subStatExpiring.textContent = data.stats.expiringCount || 0;
+    }
+
+    currentSubscriptions = data.codes || [];
+    renderSubscriptionsTable(currentSubscriptions);
+  } catch (err) {
+    console.error('載入訂閱碼失敗:', err);
+  }
+}
+
+// 渲染訂閱表格
+function renderSubscriptionsTable(subs) {
+  if (!elements.subTableBody) return;
+  elements.subTableBody.innerHTML = '';
+
+  if (subs.length === 0) {
+    elements.subEmptyState?.classList.remove('hidden');
+    return;
+  }
+  elements.subEmptyState?.classList.add('hidden');
+
+  const now = Date.now();
+  const sevenDays = 7 * 86400000;
+
+  subs.forEach(s => {
+    const tr = document.createElement('tr');
+
+    const isPerm = s.type === 'permanent';
+    const isExpired = !isPerm && s.expireAt && new Date(s.expireAt).getTime() < now;
+    const isExpiring = !isPerm && s.expireAt && !isExpired && (new Date(s.expireAt).getTime() - now <= sevenDays);
+    const isDisabled = s.status === 'disabled';
+
+    let statusBadge = '<span class="badge badge-success">🟢 生效中</span>';
+    if (isDisabled) {
+      statusBadge = '<span class="badge" style="background:#f1f5f9; color:#64748b;">⚪ 已停用</span>';
+    } else if (isExpired) {
+      statusBadge = '<span class="badge badge-danger">🔴 已過期</span>';
+    } else if (isExpiring) {
+      statusBadge = '<span class="badge badge-warning">⏳ 即將到期</span>';
+    } else if (isPerm) {
+      statusBadge = '<span class="badge badge-permanent">👑 永久有效</span>';
+    }
+
+    let expireDesc = '終身永久';
+    if (!isPerm && s.expireAt) {
+      const expDate = new Date(s.expireAt);
+      const daysLeft = Math.max(0, Math.ceil((expDate.getTime() - now) / 86400000));
+      const dateStr = expDate.toLocaleDateString('zh-TW');
+      expireDesc = isExpired
+        ? `<span style="color:#dc2626; font-weight:700;">已於 ${dateStr} 到期</span>`
+        : `<span>${dateStr} (剩餘 <b>${daysLeft}</b> 天)</span>`;
+    }
+
+    const typeDesc = isPerm 
+      ? '<span style="font-weight:700; color:#d97706;">👑 永久 VIP</span>' 
+      : '<span style="color:#475569;">⏳ 限期體驗</span>';
+
+    const lastUsedStr = s.lastUsedAt 
+      ? new Date(s.lastUsedAt).toLocaleString('zh-TW', { hour12: false }) 
+      : '尚未開始練習';
+
+    tr.innerHTML = `
+      <td>
+        <div style="display:flex; align-items:center; gap:0.4rem;">
+          <span class="sub-code-badge">${escapeHtml(s.code)}</span>
+          <button class="btn btn-outline btn-sm btn-copy-sub" data-code="${escapeHtml(s.code)}" title="一鍵複製授權碼" style="padding:2px 6px; font-size:0.75rem;">📋</button>
+        </div>
+      </td>
+      <td>
+        <div style="font-weight:700; color:#0f172a;">${escapeHtml(s.name || '學員教練')}</div>
+        <div style="font-size:0.75rem; color:#94a3b8;">建立於 ${new Date(s.createdAt).toLocaleDateString('zh-TW')}</div>
+      </td>
+      <td>${typeDesc}</td>
+      <td>${expireDesc}</td>
+      <td>${statusBadge}</td>
+      <td>
+        <div style="font-size:0.85rem;">已使用 <b>${s.useCount || 0}</b> 次</div>
+        <div style="font-size:0.72rem; color:#94a3b8;">最後於：${lastUsedStr}</div>
+      </td>
+      <td>
+        <div style="display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm btn-edit-sub" data-code="${escapeHtml(s.code)}" style="border-color:#6366f1; color:#4338ca; font-weight:700;">
+            ⏳ 延長/修改
+          </button>
+          <button class="btn btn-outline btn-sm btn-toggle-sub" data-code="${escapeHtml(s.code)}" data-status="${s.status || 'active'}">
+            ${isDisabled ? '🟢 啟用' : '⏸️ 停用'}
+          </button>
+          <button class="btn btn-danger btn-sm btn-delete-sub" data-code="${escapeHtml(s.code)}" title="刪除此授權碼">
+            🗑️
+          </button>
+        </div>
+      </td>
+    `;
+
+    elements.subTableBody.appendChild(tr);
+  });
+
+  // 綁定操作按鈕
+  elements.subTableBody.querySelectorAll('.btn-copy-sub').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-code');
+      copyToClipboard(code, `📋 授權碼【${code}】已複製到剪貼簿！`);
+    });
+  });
+
+  elements.subTableBody.querySelectorAll('.btn-edit-sub').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-code');
+      openEditSubModal(code);
+    });
+  });
+
+  elements.subTableBody.querySelectorAll('.btn-toggle-sub').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.getAttribute('data-code');
+      const current = btn.getAttribute('data-status');
+      const target = current === 'disabled' ? 'active' : 'disabled';
+      await updateSubscriptionStatus(code, target);
+    });
+  });
+
+  elements.subTableBody.querySelectorAll('.btn-delete-sub').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const code = btn.getAttribute('data-code');
+      if (confirm(`確定要永久刪除訂閱授權碼【${code}】嗎？刪除後持有人將無法再進行道館對決！`)) {
+        await deleteSubscriptionCode(code);
+      }
+    });
+  });
+}
+
+function generateRandomSubCode() {
+  const r1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const r2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+  if (elements.inputCreateSubCode) {
+    elements.inputCreateSubCode.value = `CQ-${r1}-${r2}`;
+  }
+}
+
+function openCreateSubModal() {
+  generateRandomSubCode();
+  if (elements.inputCreateSubName) elements.inputCreateSubName.value = '';
+  if (elements.selectCreateSubType) elements.selectCreateSubType.value = 'days_30';
+  elements.groupCustomDays?.classList.add('hidden');
+  elements.modalCreateSub?.classList.remove('hidden');
+}
+
+function closeCreateSubModal() {
+  elements.modalCreateSub?.classList.add('hidden');
+}
+
+async function handleCreateSubscription() {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  const code = (elements.inputCreateSubCode?.value || '').trim().toUpperCase();
+  const name = (elements.inputCreateSubName?.value || '').trim();
+  const typeVal = elements.selectCreateSubType?.value || 'days_30';
+
+  if (!name) {
+    alert('請填寫學員名稱或備註資訊！');
+    elements.inputCreateSubName?.focus();
+    return;
+  }
+
+  let type = 'days';
+  let days = 30;
+
+  if (typeVal === 'permanent') {
+    type = 'permanent';
+  } else if (typeVal === 'days_30') {
+    days = 30;
+  } else if (typeVal === 'days_90') {
+    days = 90;
+  } else if (typeVal === 'days_180') {
+    days = 180;
+  } else if (typeVal === 'days_365') {
+    days = 365;
+  } else if (typeVal === 'custom_days') {
+    days = Math.max(1, Number(elements.inputCreateSubCustomDays?.value) || 30);
+  }
+
+  try {
+    const res = await fetch('/api/admin/subscriptions/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ code, name, type, days })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`🎉 ${data.message}`);
+      closeCreateSubModal();
+      await loadSubscriptions();
+    } else {
+      alert(`❌ 建立失敗: ${data.error}`);
+    }
+  } catch (err) {
+    alert('連線異常，請稍後再試');
+  }
+}
+
+function openEditSubModal(code) {
+  const sub = currentSubscriptions.find(s => s.code === code);
+  if (!sub) return;
+  editingSubscription = sub;
+
+  if (elements.editSubCodeDisplay) elements.editSubCodeDisplay.textContent = sub.code;
+  if (elements.editSubNameDisplay) elements.editSubNameDisplay.textContent = sub.name || '學員教練';
+  if (elements.editSubStatusDisplay) {
+    const isPerm = sub.type === 'permanent';
+    const isExpired = !isPerm && sub.expireAt && new Date(sub.expireAt).getTime() < Date.now();
+    elements.editSubStatusDisplay.innerHTML = sub.status === 'disabled' 
+      ? '<span style="color:#64748b;">已停用</span>' 
+      : (isExpired ? '<span style="color:#dc2626;">已過期</span>' : (isPerm ? '<span style="color:#d97706;">永久有效</span>' : '生效中'));
+  }
+
+  if (elements.inputEditSubName) elements.inputEditSubName.value = sub.name || '';
+  if (elements.selectEditSubStatus) elements.selectEditSubStatus.value = sub.status || 'active';
+
+  elements.modalEditSub?.classList.remove('hidden');
+}
+
+function closeEditSubModal() {
+  elements.modalEditSub?.classList.add('hidden');
+  editingSubscription = null;
+}
+
+async function applyQuickExtend(days, isPerm) {
+  if (!editingSubscription) return;
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  const payload = {
+    code: editingSubscription.code,
+    setPermanent: isPerm,
+    extendDays: isPerm ? null : days
+  };
+
+  try {
+    const res = await fetch('/api/admin/subscriptions/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`🎉 ${isPerm ? '已成功將該訂閱碼調整為【永久有效】！' : `已成功為該訂閱碼延長 ${days} 天效期！`}`);
+      closeEditSubModal();
+      await loadSubscriptions();
+    } else {
+      alert(`❌ 操作失敗: ${data.error}`);
+    }
+  } catch (e) {
+    alert('連線異常，請稍後再試');
+  }
+}
+
+async function handleEditSubscription() {
+  if (!editingSubscription) return;
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  const name = (elements.inputEditSubName?.value || '').trim();
+  const status = elements.selectEditSubStatus?.value || 'active';
+
+  try {
+    const res = await fetch('/api/admin/subscriptions/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ code: editingSubscription.code, name, status })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert('🎉 訂閱設定已成功儲存！');
+      closeEditSubModal();
+      await loadSubscriptions();
+    } else {
+      alert(`❌ 儲存失敗: ${data.error}`);
+    }
+  } catch (e) {
+    alert('連線異常，請稍後再試');
+  }
+}
+
+async function updateSubscriptionStatus(code, status) {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  try {
+    const res = await fetch('/api/admin/subscriptions/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ code, status })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await loadSubscriptions();
+    } else {
+      alert(`❌ 切換失敗: ${data.error}`);
+    }
+  } catch (e) {
+    alert('連線異常，請稍後再試');
+  }
+}
+
+async function deleteSubscriptionCode(code) {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  try {
+    const res = await fetch('/api/admin/subscriptions/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      await loadSubscriptions();
+    } else {
+      alert(`❌ 刪除失敗: ${data.error}`);
+    }
+  } catch (e) {
+    alert('連線異常，請稍後再試');
+  }
+}
+
+function copyToClipboard(text, successMsg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert(successMsg || '已複製到剪貼簿！');
+    });
+  } else {
+    prompt('請複製以下文字：', text);
+  }
+}
+
+function handleExportSubsJson() {
+  if (!currentSubscriptions || currentSubscriptions.length === 0) {
+    alert('目前尚無任何訂閱授權碼可供匯出');
+    return;
+  }
+  const jsonStr = JSON.stringify(currentSubscriptions, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `CoachQuest_訂閱名冊_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }

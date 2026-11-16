@@ -89,6 +89,142 @@ async function saveStoredPracticeLogs(env, logs) {
   }
 }
 
+// ========================================================
+// 訂閱制授權碼系統 (Subscription Code System)
+// 支援 Cloudflare KV 持久化與記憶體備援
+// ========================================================
+const COACH_CONTACT_INFO = {
+  wechatId: "Sunny196208",
+  email: "shunyi.lee@gmail.com",
+  lineQrUrl: "/assets/line-qr.png",
+  wechatQrUrl: "/assets/wechat-qr.png",
+  hint: "添加時請備註「CoachQuest」或「心茶記」，Sunny 教練將親自為您開通或延長專屬練習授權碼！"
+};
+
+// 預設永久測試授權碼 (系統啟動時自動寫入 KV)
+let memorySubscriptionCodes = [
+  {
+    code: "COACH-VIP-8888",
+    name: "Sunny 教練 VIP 永久測試碼",
+    type: "permanent",
+    expireAt: null,
+    status: "active",
+    createdAt: "2026-11-16T00:00:00.000Z",
+    lastUsedAt: null,
+    useCount: 0
+  },
+  {
+    code: "VIP8888",
+    name: "VIP 永久體驗碼",
+    type: "permanent",
+    expireAt: null,
+    status: "active",
+    createdAt: "2026-11-16T00:00:00.000Z",
+    lastUsedAt: null,
+    useCount: 0
+  }
+];
+
+async function getStoredSubscriptionCodes(env) {
+  if (env && env.COACHQUEST_KV) {
+    try {
+      const kvData = await env.COACHQUEST_KV.get('subscription_codes_all', { type: 'json' });
+      if (Array.isArray(kvData) && kvData.length > 0) {
+        return kvData;
+      }
+      // 初次啟動自動將預設永久測試碼存入 KV
+      await env.COACHQUEST_KV.put('subscription_codes_all', JSON.stringify(memorySubscriptionCodes));
+      return memorySubscriptionCodes;
+    } catch (e) {
+      console.warn('KV 讀取 subscription_codes 失敗，改用記憶體資料:', e);
+    }
+  }
+  return memorySubscriptionCodes;
+}
+
+async function saveStoredSubscriptionCodes(env, codes) {
+  memorySubscriptionCodes = codes;
+  if (env && env.COACHQUEST_KV) {
+    try {
+      await env.COACHQUEST_KV.put('subscription_codes_all', JSON.stringify(codes));
+    } catch (e) {
+      console.warn('KV 儲存 subscription_codes 失敗:', e);
+    }
+  }
+}
+
+async function verifySubscriptionCode(code, env, request = null) {
+  // 若帶有合法管理員 token，直接開通管理員測試通行
+  if (request && verifyAdminSession(request, env)) {
+    return {
+      valid: true,
+      code: 'ADMIN-PASS',
+      name: '導師管理員',
+      type: 'permanent',
+      isPermanent: true,
+      expireAt: null,
+      daysLeft: 99999
+    };
+  }
+
+  if (!code || typeof code !== 'string') {
+    return { valid: false, error: '請輸入有效的教練實戰訂閱授權碼' };
+  }
+  const cleanCode = code.trim().toUpperCase();
+  if (!cleanCode) {
+    return { valid: false, error: '請輸入有效的教練實戰訂閱授權碼' };
+  }
+
+  const codes = await getStoredSubscriptionCodes(env);
+  const found = codes.find(c => (c.code || '').trim().toUpperCase() === cleanCode);
+
+  if (!found) {
+    return {
+      valid: false,
+      error: '無效的訂閱授權碼，請確認是否輸入正確，或聯繫 Sunny 教練取得專屬授權碼。'
+    };
+  }
+
+  if (found.status === 'disabled') {
+    return {
+      valid: false,
+      error: '此訂閱授權碼已被停用，請聯繫 Sunny 教練。'
+    };
+  }
+
+  if (found.type !== 'permanent' && found.expireAt) {
+    const expireTime = new Date(found.expireAt).getTime();
+    if (Date.now() > expireTime) {
+      return {
+        valid: false,
+        expired: true,
+        expireAt: found.expireAt,
+        error: `此訂閱授權碼已於 ${new Date(found.expireAt).toLocaleDateString('zh-TW')} 到期，請聯繫 Sunny 教練續期。`
+      };
+    }
+  }
+
+  // 記錄使用狀態
+  found.lastUsedAt = new Date().toISOString();
+  found.useCount = (Number(found.useCount) || 0) + 1;
+  saveStoredSubscriptionCodes(env, codes).catch(() => {});
+
+  let daysLeft = 99999;
+  if (found.type !== 'permanent' && found.expireAt) {
+    daysLeft = Math.max(0, Math.ceil((new Date(found.expireAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+  }
+
+  return {
+    valid: true,
+    code: found.code,
+    name: found.name || '學員教練',
+    type: found.type,
+    isPermanent: found.type === 'permanent',
+    expireAt: found.expireAt,
+    daysLeft
+  };
+}
+
 // 定期清理逾時房間（超過 3 小時未活動）
 function cleanupStaleRooms() {
   const now = Date.now();
@@ -644,7 +780,7 @@ export async function handleApiRequest(request, env) {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token, x-subscription-code',
     'Content-Type': 'application/json; charset=utf-8'
   };
 
@@ -703,10 +839,46 @@ export async function handleApiRequest(request, env) {
       }), { headers: corsHeaders });
     }
 
+    // 2B. POST /api/subscription/verify (學員端檢驗訂閱授權碼有效性)
+    if (pathname === '/subscription/verify' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const code = (body.code || request.headers.get('x-subscription-code') || '').trim();
+      const subCheck = await verifySubscriptionCode(code, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          valid: false,
+          error: subCheck.error,
+          message: subCheck.error,
+          expired: !!subCheck.expired,
+          contact: COACH_CONTACT_INFO
+        }), { status: 200, headers: corsHeaders });
+      }
+      return new Response(JSON.stringify({
+        ok: true,
+        valid: true,
+        ...subCheck,
+        subscription: subCheck,
+        contact: COACH_CONTACT_INFO
+      }), { headers: corsHeaders });
+    }
+
     // 3. POST /api/chat (單人關主對話)
     if (pathname === '/chat' && request.method === 'POST') {
       const body = await request.json();
       const { bossId, messages = [], turn = 1, userModel } = body;
+
+      // 檢驗訂閱授權碼
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || '請先啟用有效的教練實戰訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
 
       const boss = BOSS_DICTIONARY[bossId];
       if (!boss) {
@@ -740,6 +912,18 @@ export async function handleApiRequest(request, env) {
       const body = await request.json();
       const { bossId, messages = [], userModel } = body;
 
+      // 檢驗訂閱授權碼
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || '請先啟用有效的教練實戰訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
       const boss = BOSS_DICTIONARY[bossId];
       if (!boss) {
         return new Response(JSON.stringify({ ok: false, error: '找不到指定關主' }), { status: 404, headers: corsHeaders });
@@ -768,6 +952,18 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/evaluate' && request.method === 'POST') {
       const body = await request.json();
       const { bossId, messages = [], userModel } = body;
+
+      // 檢驗訂閱授權碼
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || '請先啟用有效的教練實戰訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
 
       const boss = BOSS_DICTIONARY[bossId];
       if (!boss) {
@@ -1651,6 +1847,188 @@ export async function handleApiRequest(request, env) {
         ok: true,
         message: `成功匯入學員【${studentName}】的存檔，新增/更新了 ${importedCount} 筆實戰紀錄！`,
         importedCount
+      }), { headers: corsHeaders });
+    }
+
+    // ========================================================
+    // 導師後台：訂閱授權碼管理端點 (Admin Subscriptions APIs)
+    // ========================================================
+
+    // 21. GET /api/admin/subscriptions (管理員取得所有訂閱碼與統計)
+    if (pathname === '/admin/subscriptions' && request.method === 'GET') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
+      }
+
+      const codes = await getStoredSubscriptionCodes(env);
+      const search = (url.searchParams.get('search') || '').toLowerCase().trim();
+      const statusFilter = (url.searchParams.get('status') || 'all').trim();
+
+      const now = Date.now();
+      const sevenDays = 7 * 86400000;
+
+      let filtered = codes;
+      if (search) {
+        filtered = filtered.filter(c => 
+          (c.code && c.code.toLowerCase().includes(search)) ||
+          (c.name && c.name.toLowerCase().includes(search))
+        );
+      }
+
+      if (statusFilter === 'active') {
+        filtered = filtered.filter(c => c.status === 'active' && (c.type === 'permanent' || !c.expireAt || new Date(c.expireAt).getTime() >= now));
+      } else if (statusFilter === 'permanent') {
+        filtered = filtered.filter(c => c.type === 'permanent');
+      } else if (statusFilter === 'expiring') {
+        filtered = filtered.filter(c => c.status === 'active' && c.type !== 'permanent' && c.expireAt && (new Date(c.expireAt).getTime() - now <= sevenDays) && (new Date(c.expireAt).getTime() >= now));
+      } else if (statusFilter === 'expired') {
+        filtered = filtered.filter(c => c.type !== 'permanent' && c.expireAt && new Date(c.expireAt).getTime() < now);
+      } else if (statusFilter === 'disabled') {
+        filtered = filtered.filter(c => c.status === 'disabled');
+      }
+
+      const totalCount = codes.length;
+      const activeCount = codes.filter(c => c.status === 'active' && (c.type === 'permanent' || !c.expireAt || new Date(c.expireAt).getTime() >= now)).length;
+      const permanentCount = codes.filter(c => c.type === 'permanent').length;
+      const expiringCount = codes.filter(c => c.status === 'active' && c.type !== 'permanent' && c.expireAt && (new Date(c.expireAt).getTime() - now <= sevenDays) && (new Date(c.expireAt).getTime() >= now)).length;
+      const expiredCount = codes.filter(c => c.type !== 'permanent' && c.expireAt && new Date(c.expireAt).getTime() < now).length;
+      const disabledCount = codes.filter(c => c.status === 'disabled').length;
+
+      return new Response(JSON.stringify({
+        ok: true,
+        stats: {
+          totalCount,
+          activeCount,
+          permanentCount,
+          expiringCount,
+          expiredCount,
+          disabledCount
+        },
+        codes: filtered,
+        subscriptions: filtered,
+        contact: COACH_CONTACT_INFO
+      }), { headers: corsHeaders });
+    }
+
+    // 22. POST /api/admin/subscriptions/create (管理員新增或生成訂閱碼)
+    if (pathname === '/admin/subscriptions/create' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      let code = (body.code || '').trim().toUpperCase();
+      if (!code) {
+        // 自動生成格式：CQ-4碼-4碼
+        const r1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const r2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+        code = `CQ-${r1}-${r2}`;
+      }
+
+      const codes = await getStoredSubscriptionCodes(env);
+      if (codes.some(c => (c.code || '').toUpperCase() === code)) {
+        return new Response(JSON.stringify({ ok: false, error: `訂閱授權碼【${code}】已存在，請使用其他代碼！` }), { status: 400, headers: corsHeaders });
+      }
+
+      const type = body.type || 'days';
+      let expireAt = null;
+      if (type === 'days') {
+        const days = Math.max(1, Number(body.days) || 30);
+        expireAt = new Date(Date.now() + days * 86400000).toISOString();
+      } else if (type === 'expire_date' && body.expireAt) {
+        expireAt = new Date(body.expireAt).toISOString();
+      } else if (type === 'permanent') {
+        expireAt = null;
+      }
+
+      const newEntry = {
+        code,
+        name: (body.name || '學員教練').trim(),
+        type,
+        expireAt,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+        useCount: 0
+      };
+
+      codes.unshift(newEntry);
+      await saveStoredSubscriptionCodes(env, codes);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        message: `成功建立訂閱授權碼【${code}】！`,
+        subscription: newEntry
+      }), { headers: corsHeaders });
+    }
+
+    // 23. POST /api/admin/subscriptions/update (管理員更新/延長訂閱碼)
+    if (pathname === '/admin/subscriptions/update' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const code = (body.code || '').trim().toUpperCase();
+      const codes = await getStoredSubscriptionCodes(env);
+      const entry = codes.find(c => (c.code || '').toUpperCase() === code);
+
+      if (!entry) {
+        return new Response(JSON.stringify({ ok: false, error: '找不到該訂閱授權碼' }), { status: 404, headers: corsHeaders });
+      }
+
+      if (body.name) entry.name = String(body.name).trim();
+      if (body.status === 'active' || body.status === 'disabled') {
+        entry.status = body.status;
+      }
+
+      if (body.setPermanent === true) {
+        entry.type = 'permanent';
+        entry.expireAt = null;
+      } else if (body.extendDays) {
+        const days = Number(body.extendDays);
+        const base = Math.max(Date.now(), entry.expireAt ? new Date(entry.expireAt).getTime() : Date.now());
+        entry.expireAt = new Date(base + days * 86400000).toISOString();
+        entry.type = 'days';
+      } else if (body.expireAt) {
+        entry.expireAt = new Date(body.expireAt).toISOString();
+        entry.type = 'expire_date';
+      }
+
+      await saveStoredSubscriptionCodes(env, codes);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        message: `訂閱授權碼【${code}】已成功更新！`,
+        subscription: entry
+      }), { headers: corsHeaders });
+    }
+
+    // 24. POST /api/admin/subscriptions/delete (管理員刪除訂閱碼)
+    if (pathname === '/admin/subscriptions/delete' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
+      }
+
+      const body = await request.json().catch(() => ({}));
+      const code = (body.code || '').trim().toUpperCase();
+      let codes = await getStoredSubscriptionCodes(env);
+      const initialLen = codes.length;
+      codes = codes.filter(c => (c.code || '').toUpperCase() !== code);
+
+      if (codes.length === initialLen) {
+        return new Response(JSON.stringify({ ok: false, error: '找不到該訂閱授權碼' }), { status: 404, headers: corsHeaders });
+      }
+
+      await saveStoredSubscriptionCodes(env, codes);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        message: `已刪除訂閱授權碼【${code}】！`
       }), { headers: corsHeaders });
     }
 

@@ -50,6 +50,12 @@
         <span class="badge-count" id="navPracticeLogCount" style="display:none; font-size:0.65rem; background:#4f46e5; color:#fff; border-radius:99px; padding:0 5px; margin-left:3px; font-weight:700;"></span>
       </button>
 
+      <button class="nav-btn" id="btnNavSubscription" title="管理與檢閱您的實戰練習訂閱授權碼" style="border: 1px solid #c7d2fe; background: #f5f3ff;">
+        <span>🔑</span>
+        <span class="nav-text">訂閱授權</span>
+        <span class="badge-count" id="navSubStatusBadge" style="font-size:0.65rem; background:#7c3aed; color:#fff; border-radius:99px; padding:1px 6px; margin-left:3px; font-weight:700;">未啟用</span>
+      </button>
+
       <button class="nav-btn" id="btnNavPokedex" title="百寶箱圖鑑儀表板">
         <span>🎒</span>
         <span class="nav-text">百寶箱</span>
@@ -659,6 +665,21 @@
             <span id="importResultMsg" style="font-size: 0.85rem; margin-top: 0.5rem; display: block;"></span>
           </div>
 
+          <div class="form-divider"></div>
+
+          <div class="form-group">
+            <label><b>🔑 專屬練習訂閱授權狀態</b></label>
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:0.75rem 1rem; margin-top:0.35rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+              <div>
+                <div style="font-weight:700; color:#0f172a; font-size:0.9rem;" id="settingsSubCodeDisplay">尚未綁定授權碼</div>
+                <div style="font-size:0.78rem; color:#64748b;" id="settingsSubDescDisplay">輸入授權碼即可解鎖四大道館對話實戰</div>
+              </div>
+              <button type="button" class="btn btn-outline btn-sm" id="btnOpenSubModalFromSettings" style="border-color:#7c3aed; color:#6d28d9; font-weight:700;">
+                管理 / 啟用授權
+              </button>
+            </div>
+          </div>
+
           <div style="margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: center;">
             <span style="font-size: 0.85rem; color: #475569; font-weight: 600;">👨‍🏫 導師管理專區</span>
             <a href="/admin" target="_blank" class="btn btn-outline btn-sm" style="font-size: 0.8rem; color: #4f46e5; border-color: #4f46e5; font-weight: 700; text-decoration: none;">
@@ -718,6 +739,100 @@
         <button class="btn btn-primary" id="btnFinishOnboarding" style="width: 100%; padding: 0.75rem; font-size: 1.05rem;">
           🚀 開啟教練大冒險！
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 6: 訂閱授權與聯繫導師 (Subscription Modal) ================= -->
+  <div class="modal-overlay hidden" id="modalSubscription">
+    <div class="modal-dialog modal-large" style="max-width: 620px;">
+      <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <span style="font-size:1.4rem;">🔐</span>
+          <h3>CoachQuest 專屬教練實戰授權</h3>
+        </div>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+
+      <div class="modal-body" style="max-height: 80vh; overflow-y: auto;">
+        
+        <!-- 當前訂閱狀態卡 -->
+        <div id="subStatusCard" style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:12px; padding:1rem 1.25rem; margin-bottom:1.25rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.4rem;">
+            <div style="font-size:0.85rem; color:#64748b; font-weight:700;">當前授權狀態</div>
+            <span id="subStatusBadge" style="font-size:0.75rem; padding:3px 10px; border-radius:99px; font-weight:700; background:#fee2e2; color:#dc2626;">未啟用授權</span>
+          </div>
+          <div style="display:flex; align-items:baseline; gap:0.6rem; flex-wrap:wrap;">
+            <span id="subCurrentCodeText" style="font-family:monospace; font-size:1.25rem; font-weight:800; color:#0f172a;">尚未綁定</span>
+            <span id="subCurrentNameText" style="font-size:0.85rem; color:#475569;"></span>
+          </div>
+          <div id="subExpiryText" style="font-size:0.8rem; color:#64748b; margin-top:0.35rem;">
+            請在下方輸入 Sunny 教練發行之學員專屬授權碼以解鎖實戰道館。
+          </div>
+        </div>
+
+        <!-- 訂閱碼輸入表單 -->
+        <div style="background:#fff; border:1px solid #cbd5e1; border-radius:12px; padding:1.2rem; margin-bottom:1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+          <label for="inputSubCode" style="display:block; font-weight:700; font-size:0.9rem; color:#1e293b; margin-bottom:0.4rem;">
+            輸入學員訂閱授權碼
+          </label>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <input type="text" id="inputSubCode" class="form-control" placeholder="例如：COACH-VIP-8888 或 VIP8888" style="flex:1; min-width:200px; font-family:monospace; font-weight:700; text-transform:uppercase; padding:0.65rem 0.85rem; border:1.5px solid #94a3b8; border-radius:8px; font-size:1rem;">
+            <button id="btnVerifySubCode" class="btn btn-primary" style="padding:0.65rem 1.25rem; font-weight:700; white-space:nowrap;">
+              🚀 驗證並啟用
+            </button>
+          </div>
+          <div id="subFeedbackMsg" style="margin-top:0.6rem; font-size:0.85rem; display:none;"></div>
+        </div>
+
+        <!-- 導引找到微信號或 LINE (來自 blog 資料夾資訊) -->
+        <div class="sub-contact-card" style="background:linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 100%); border:1.5px solid #e9d5ff; border-radius:12px; padding:1.25rem;">
+          <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.5rem;">
+            <span style="font-size:1.3rem;">💬</span>
+            <div style="font-weight:800; color:#581c87; font-size:1rem;">尚未取得授權碼或效期已到期？</div>
+          </div>
+          <p style="font-size:0.85rem; color:#6b21a8; line-height:1.5; margin-bottom:1rem;">
+            CoachQuest 為 Sunny 教練（ICF-ACC 認證專業教練）學員專屬教練實戰對決訓練系統。歡迎透過 LINE 或微信聯繫教練取得專屬開通授權碼：
+          </p>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0.75rem; margin-bottom:1rem;">
+            
+            <!-- 微信號 -->
+            <div style="background:#fff; border:1px solid #d8b4fe; border-radius:10px; padding:0.85rem; text-align:center;">
+              <div style="font-size:0.78rem; font-weight:700; color:#7e22ce; margin-bottom:0.25rem;">💬 微訊號 (WeChat)</div>
+              <div style="font-size:1.05rem; font-weight:800; color:#0f172a; font-family:monospace; margin-bottom:0.5rem;" id="wechatIdText">Sunny196208</div>
+              <button type="button" class="btn btn-outline btn-sm" id="btnCopyWechatId" style="width:100%; font-size:0.75rem; padding:3px 6px; border-color:#9333ea; color:#9333ea; font-weight:700;">
+                📋 一鍵複製微信號
+              </button>
+            </div>
+
+            <!-- LINE QR Code -->
+            <div style="background:#fff; border:1px solid #d8b4fe; border-radius:10px; padding:0.85rem; text-align:center;">
+              <div style="font-size:0.78rem; font-weight:700; color:#059669; margin-bottom:0.35rem;">🟢 LINE 加好友</div>
+              <img src="/assets/line-qr.png" alt="Sunny 教練 LINE 二維碼" style="width:105px; height:105px; object-fit:contain; border-radius:6px; border:1px solid #e2e8f0; display:block; margin:0 auto 0.35rem auto;">
+              <div style="font-size:0.72rem; color:#64748b;">掃碼加教練 LINE</div>
+            </div>
+
+            <!-- 微信名片 QR Code -->
+            <div style="background:#fff; border:1px solid #d8b4fe; border-radius:10px; padding:0.85rem; text-align:center;">
+              <div style="font-size:0.78rem; font-weight:700; color:#0284c7; margin-bottom:0.35rem;">🟢 微信名片</div>
+              <img src="/assets/wechat-qr.png" alt="Sunny 教練微信名片" style="width:105px; height:105px; object-fit:contain; border-radius:6px; border:1px solid #e2e8f0; display:block; margin:0 auto 0.35rem auto;">
+              <div style="font-size:0.72rem; color:#64748b;">掃碼加教練微信</div>
+            </div>
+
+          </div>
+
+          <div style="font-size:0.78rem; color:#6b21a8; line-height:1.45; background:#fff; border-radius:8px; padding:0.6rem 0.85rem; border:1px dashed #c084fc;">
+            💡 <b>加好友請備註：</b>「CoachQuest」或「心茶記」，教練將親自為您開通或延長專屬授權碼！<br>
+            亦可發送郵件至：<a href="mailto:shunyi.lee@gmail.com" style="color:#7e22ce; font-weight:700; text-decoration:underline;">shunyi.lee@gmail.com</a>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+        <span style="font-size:0.78rem; color:#64748b;">測試體驗可使用永久測試碼：<code>COACH-VIP-8888</code> 或 <code>VIP8888</code></span>
+        <button class="btn btn-primary btn-sm" data-close-modal>確定</button>
       </div>
     </div>
   </div>

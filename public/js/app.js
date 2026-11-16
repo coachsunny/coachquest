@@ -139,6 +139,22 @@ function initElements() {
     btnCopyPracticeLogText: document.getElementById('btnCopyPracticeLogText'),
     modalMultiplayer: document.getElementById('modalMultiplayer'),
 
+    // Subscription Elements
+    btnNavSubscription: document.getElementById('btnNavSubscription'),
+    navSubStatusBadge: document.getElementById('navSubStatusBadge'),
+    modalSubscription: document.getElementById('modalSubscription'),
+    subStatusBadge: document.getElementById('subStatusBadge'),
+    subCurrentCodeText: document.getElementById('subCurrentCodeText'),
+    subCurrentNameText: document.getElementById('subCurrentNameText'),
+    subExpiryText: document.getElementById('subExpiryText'),
+    inputSubCode: document.getElementById('inputSubCode'),
+    btnVerifySubCode: document.getElementById('btnVerifySubCode'),
+    subFeedbackMsg: document.getElementById('subFeedbackMsg'),
+    btnCopyWechatId: document.getElementById('btnCopyWechatId'),
+    settingsSubCodeDisplay: document.getElementById('settingsSubCodeDisplay'),
+    settingsSubDescDisplay: document.getElementById('settingsSubDescDisplay'),
+    btnOpenSubModalFromSettings: document.getElementById('btnOpenSubModalFromSettings'),
+
     // Multiplayer Modal Elements
     tabMpCreate: document.getElementById('tabMpCreate'),
     tabMpJoin: document.getElementById('tabMpJoin'),
@@ -218,6 +234,8 @@ export function initApp() {
     renderBossGrid();
     checkApiStatus();
     updatePracticeLogsNavBadge();
+    updateSubscriptionNavBadge();
+    refreshSubscriptionStatus();
     autoSyncLocalPracticeLogsToBackend();
 
     // 首次進入時啟動起程註冊設定
@@ -236,11 +254,23 @@ function bindEvents() {
   // 導航列按鈕
   document.getElementById('btnNavMultiplayer')?.addEventListener('click', () => openMultiplayerModal());
   document.getElementById('btnNavPracticeLogs')?.addEventListener('click', () => openPracticeLogsListModal());
+  document.getElementById('btnNavSubscription')?.addEventListener('click', () => openSubscriptionModal());
   document.getElementById('btnNavPokedex')?.addEventListener('click', () => openInventoryModal());
   document.getElementById('btnNavLeaderboard')?.addEventListener('click', () => openLeaderboardModal());
   document.getElementById('btnNavSettings')?.addEventListener('click', () => openSettingsModal());
   document.getElementById('playerHud')?.addEventListener('click', () => openSettingsModal());
   elements.btnSyncCloudLogs?.addEventListener('click', () => handleSyncCloudLogs());
+  elements.btnOpenSubModalFromSettings?.addEventListener('click', () => {
+    elements.modalSettings?.classList.add('hidden');
+    openSubscriptionModal();
+  });
+  elements.btnVerifySubCode?.addEventListener('click', () => handleVerifySubscriptionCode());
+  elements.inputSubCode?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleVerifySubscriptionCode();
+  });
+  elements.btnCopyWechatId?.addEventListener('click', () => {
+    copyToClipboardText('Sunny196208', '📋 Sunny 教練微訊號 (Sunny196208) 已複製！可在微信搜尋加好友！');
+  });
 
   // 關閉 Modal 按鈕
   document.querySelectorAll('[data-close-modal]').forEach(btn => {
@@ -878,6 +908,11 @@ function renderBossGrid() {
 // 發起單人關主對決 (Start Single Boss Battle)
 // ========================================================
 export function startBossBattle(bossId) {
+  if (!isSubscriptionActive()) {
+    openSubscriptionModal('請先輸入並啟用有效的教練實戰訂閱授權碼，即可挑戰道館關主！');
+    return;
+  }
+
   state.isMultiplayer = false;
   const boss = getBossById(bossId);
   if (!boss) return;
@@ -1005,21 +1040,30 @@ async function handleSendMessage(overrideText = null) {
   try {
     const userApiKey = getSavedApiKey();
     const userModel = getSavedModel();
+    const subCode = getSubscriptionCode();
 
     const response = await fetch('/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-subscription-code': subCode
+      },
       body: JSON.stringify({
         bossId: state.selectedBoss.id,
         messages: state.dialogueHistory.map(m => ({ role: m.role, content: m.content })),
         turn: state.turnCount,
         userApiKey,
-        userModel
+        userModel,
+        subscriptionCode: subCode
       })
     });
 
     const data = await response.json();
     if (!response.ok || !data.ok) {
+      if (response.status === 403 || data.error === 'SUBSCRIPTION_REQUIRED') {
+        openSubscriptionModal(data.message || '您的訂閱授權碼已過期或尚未啟用，請先啟用後繼續練習。');
+        return;
+      }
       throw new Error(data.error || '後端伺服器回應異常');
     }
 
@@ -1083,19 +1127,30 @@ async function handleRequestHint() {
   try {
     const userApiKey = getSavedApiKey();
     const userModel = getSavedModel();
+    const subCode = getSubscriptionCode();
 
     const response = await fetch('/api/hint', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-subscription-code': subCode
+      },
       body: JSON.stringify({
         bossId: state.selectedBoss.id,
         messages: state.dialogueHistory.map(m => ({ role: m.role, content: m.content })),
         userApiKey,
-        userModel
+        userModel,
+        subscriptionCode: subCode
       })
     });
 
     const data = await response.json();
+    if (!response.ok || !data.ok) {
+      if (response.status === 403 || data.error === 'SUBSCRIPTION_REQUIRED') {
+        openSubscriptionModal(data.message || '您的訂閱授權碼已過期或尚未啟用。');
+        return;
+      }
+    }
     const fwName = (state.selectedBoss.framework && state.selectedBoss.framework.name) || state.selectedBoss.weaknessName || '非暴力溝通';
 
     if (data.ok && data.hint) {
@@ -1334,19 +1389,28 @@ async function handleTriggerEvaluation() {
     }
 
     // 單人模式 或 模式 A 競速模式
+    const subCode = getSubscriptionCode();
     const response = await fetch('/api/evaluate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-subscription-code': subCode
+      },
       body: JSON.stringify({
         bossId: state.selectedBoss.id,
         messages: state.dialogueHistory.map(m => ({ role: m.role, content: m.content })),
         userApiKey,
-        userModel
+        userModel,
+        subscriptionCode: subCode
       })
     });
 
     const data = await response.json();
     if (!response.ok || !data.ok) {
+      if (response.status === 403 || data.error === 'SUBSCRIPTION_REQUIRED') {
+        openSubscriptionModal(data.message || '您的訂閱授權碼已過期或尚未啟用。');
+        return;
+      }
       throw new Error(data.error || '評分系統未正常回應');
     }
 
@@ -2967,6 +3031,25 @@ function openSettingsModal() {
   if (elements.apiTestResult) elements.apiTestResult.textContent = '';
   if (elements.importResultMsg) elements.importResultMsg.textContent = '';
 
+  const sub = getSavedSubscription();
+  if (elements.settingsSubCodeDisplay) {
+    if (sub && sub.code) {
+      const isPerm = sub.isPermanent || sub.type === 'permanent';
+      const isExpired = !isPerm && sub.expireAt && new Date(sub.expireAt).getTime() < Date.now();
+      elements.settingsSubCodeDisplay.innerHTML = `<span style="font-family:monospace; background:#f1f5f9; padding:2px 6px; border-radius:4px; color:#1e293b;">${escapeHtml(sub.code)}</span> (${isPerm ? '👑 永久 VIP' : (isExpired ? '🔴 已過期' : `剩餘 ${sub.daysLeft} 天`)})`;
+      if (elements.settingsSubDescDisplay) {
+        elements.settingsSubDescDisplay.textContent = isExpired 
+          ? `授權已於 ${new Date(sub.expireAt).toLocaleDateString('zh-TW')} 到期，請聯繫 Sunny 教練續期。` 
+          : `已成功授權解鎖道館實戰（${sub.name || '學員教練'}）`;
+      }
+    } else {
+      elements.settingsSubCodeDisplay.textContent = '尚未綁定授權碼';
+      if (elements.settingsSubDescDisplay) {
+        elements.settingsSubDescDisplay.textContent = '輸入授權碼即可解鎖四大道館對話實戰';
+      }
+    }
+  }
+
   elements.modalSettings?.classList.remove('hidden');
   if (LangManager.getLang() === 'zh-CN' && elements.modalSettings) {
     LangManager.translateDOM(elements.modalSettings);
@@ -3165,6 +3248,284 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ========================================================
+// 訂閱授權碼管理 (Subscription Authorization System)
+// ========================================================
+const SUB_STORAGE_KEY = 'coachquest_subscription_v1';
+
+export function getSavedSubscription() {
+  try {
+    const raw = localStorage.getItem(SUB_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function saveSubscription(subData) {
+  try {
+    localStorage.setItem(SUB_STORAGE_KEY, JSON.stringify(subData));
+    updateSubscriptionNavBadge();
+  } catch (e) {
+    console.error('儲存訂閱授權失敗:', e);
+  }
+}
+
+export function clearSubscription() {
+  try {
+    localStorage.removeItem(SUB_STORAGE_KEY);
+    updateSubscriptionNavBadge();
+  } catch (e) {
+    console.error('清除訂閱授權失敗:', e);
+  }
+}
+
+export function getSubscriptionCode() {
+  const sub = getSavedSubscription();
+  return sub && sub.code ? String(sub.code).trim() : '';
+}
+
+export function isSubscriptionActive() {
+  const sub = getSavedSubscription();
+  if (!sub || !sub.code) return false;
+  if (sub.isPermanent || sub.type === 'permanent') return true;
+  if (sub.expireAt) {
+    const expireTime = new Date(sub.expireAt).getTime();
+    if (isNaN(expireTime) || expireTime < Date.now()) return false;
+  }
+  return true;
+}
+
+export function updateSubscriptionNavBadge() {
+  if (!elements.navSubStatusBadge) return;
+  const sub = getSavedSubscription();
+  if (!sub || !sub.code) {
+    elements.navSubStatusBadge.textContent = '未啟用';
+    elements.navSubStatusBadge.style.background = '#64748b';
+    return;
+  }
+  const isPerm = sub.isPermanent || sub.type === 'permanent';
+  const isExpired = !isPerm && sub.expireAt && new Date(sub.expireAt).getTime() < Date.now();
+
+  if (isPerm) {
+    elements.navSubStatusBadge.textContent = 'VIP';
+    elements.navSubStatusBadge.style.background = '#7c3aed';
+  } else if (isExpired) {
+    elements.navSubStatusBadge.textContent = '已過期';
+    elements.navSubStatusBadge.style.background = '#ef4444';
+  } else {
+    elements.navSubStatusBadge.textContent = sub.daysLeft !== undefined ? `${sub.daysLeft}天` : '有效';
+    elements.navSubStatusBadge.style.background = '#10b981';
+  }
+}
+
+export async function refreshSubscriptionStatus() {
+  const code = getSubscriptionCode();
+  if (!code) {
+    updateSubscriptionNavBadge();
+    return;
+  }
+  try {
+    const res = await fetch('/api/subscription/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    const sub = data.subscription || data;
+    if (data.ok && (data.valid || sub.valid)) {
+      saveSubscription({
+        code: sub.code,
+        name: sub.name,
+        type: sub.type,
+        isPermanent: sub.isPermanent,
+        expireAt: sub.expireAt,
+        daysLeft: sub.daysLeft,
+        verifiedAt: new Date().toISOString()
+      });
+    } else if (data.ok === false || data.valid === false) {
+      const current = getSavedSubscription() || {};
+      current.expired = true;
+      current.error = data.message;
+      localStorage.setItem(SUB_STORAGE_KEY, JSON.stringify(current));
+    }
+  } catch (e) {
+    console.warn('驗證訂閱授權碼網路異常:', e);
+  }
+  updateSubscriptionNavBadge();
+}
+
+export function openSubscriptionModal(customMessage = null) {
+  const sub = getSavedSubscription();
+  const modal = elements.modalSubscription;
+  if (!modal) return;
+
+  if (elements.subFeedbackMsg) {
+    if (customMessage) {
+      elements.subFeedbackMsg.style.display = 'block';
+      elements.subFeedbackMsg.style.color = '#dc2626';
+      elements.subFeedbackMsg.style.background = '#fee2e2';
+      elements.subFeedbackMsg.style.padding = '0.5rem 0.75rem';
+      elements.subFeedbackMsg.style.borderRadius = '6px';
+      elements.subFeedbackMsg.textContent = customMessage;
+    } else {
+      elements.subFeedbackMsg.style.display = 'none';
+      elements.subFeedbackMsg.textContent = '';
+    }
+  }
+
+  if (sub && sub.code) {
+    if (elements.inputSubCode) elements.inputSubCode.value = sub.code;
+    if (elements.subCurrentCodeText) elements.subCurrentCodeText.textContent = sub.code;
+    if (elements.subCurrentNameText) elements.subCurrentNameText.textContent = sub.name ? `（${sub.name}）` : '';
+
+    const isPerm = sub.isPermanent || sub.type === 'permanent';
+    const isExpired = !isPerm && sub.expireAt && new Date(sub.expireAt).getTime() < Date.now();
+
+    if (elements.subStatusBadge) {
+      if (isPerm) {
+        elements.subStatusBadge.textContent = '👑 永久授權 VIP';
+        elements.subStatusBadge.style.background = '#ede9fe';
+        elements.subStatusBadge.style.color = '#6d28d9';
+      } else if (isExpired) {
+        elements.subStatusBadge.textContent = '🔴 已到期';
+        elements.subStatusBadge.style.background = '#fee2e2';
+        elements.subStatusBadge.style.color = '#dc2626';
+      } else {
+        elements.subStatusBadge.textContent = '🟢 授權正常啟用中';
+        elements.subStatusBadge.style.background = '#d1fae5';
+        elements.subStatusBadge.style.color = '#065f46';
+      }
+    }
+
+    if (elements.subExpiryText) {
+      if (isPerm) {
+        elements.subExpiryText.innerHTML = '✨ 此授權碼享有<b>永久有效</b>道館練習權限，無須重複輸入。';
+      } else if (isExpired) {
+        elements.subExpiryText.innerHTML = `<span style="color:#dc2626;">⚠️ 授權已於 <b>${new Date(sub.expireAt).toLocaleDateString('zh-TW')}</b> 到期。請聯繫教練延長效期。</span>`;
+      } else {
+        elements.subExpiryText.innerHTML = `📅 有效期至：<b>${new Date(sub.expireAt).toLocaleDateString('zh-TW')}</b>（剩餘約 <b>${sub.daysLeft}</b> 天）`;
+      }
+    }
+  } else {
+    if (elements.subCurrentCodeText) elements.subCurrentCodeText.textContent = '尚未綁定';
+    if (elements.subCurrentNameText) elements.subCurrentNameText.textContent = '';
+    if (elements.subStatusBadge) {
+      elements.subStatusBadge.textContent = '未啟用授權';
+      elements.subStatusBadge.style.background = '#fee2e2';
+      elements.subStatusBadge.style.color = '#dc2626';
+    }
+    if (elements.subExpiryText) {
+      elements.subExpiryText.textContent = '請在下方輸入 Sunny 教練發行之學員專屬授權碼以解鎖實戰道館。';
+    }
+    if (elements.inputSubCode) elements.inputSubCode.value = '';
+  }
+
+  modal.classList.remove('hidden');
+  if (elements.inputSubCode && (!sub || !sub.code)) {
+    elements.inputSubCode.focus();
+  }
+  if (LangManager.getLang() === 'zh-CN') {
+    LangManager.translateDOM(modal);
+  }
+}
+
+export function closeSubscriptionModal() {
+  elements.modalSubscription?.classList.add('hidden');
+}
+
+export async function handleVerifySubscriptionCode() {
+  const code = elements.inputSubCode ? elements.inputSubCode.value.trim() : '';
+  if (!code) {
+    alert(LangManager.t('請輸入授權訂閱碼！'));
+    return;
+  }
+
+  if (elements.btnVerifySubCode) {
+    elements.btnVerifySubCode.disabled = true;
+    elements.btnVerifySubCode.textContent = '驗證中...';
+  }
+
+  try {
+    const res = await fetch('/api/subscription/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+    const sub = data.subscription || data;
+
+    if (data.ok && (data.valid || sub.valid)) {
+      saveSubscription({
+        code: sub.code,
+        name: sub.name,
+        type: sub.type,
+        isPermanent: sub.isPermanent,
+        expireAt: sub.expireAt,
+        daysLeft: sub.daysLeft,
+        verifiedAt: new Date().toISOString()
+      });
+
+      if (elements.subFeedbackMsg) {
+        elements.subFeedbackMsg.style.display = 'block';
+        elements.subFeedbackMsg.style.color = '#059669';
+        elements.subFeedbackMsg.style.background = '#ecfdf5';
+        elements.subFeedbackMsg.style.padding = '0.5rem 0.75rem';
+        elements.subFeedbackMsg.style.borderRadius = '6px';
+        elements.subFeedbackMsg.textContent = `🎉 驗證成功！${sub.isPermanent ? '已啟用永久尊榮授權' : `有效期限至 ${new Date(sub.expireAt).toLocaleDateString('zh-TW')}（剩餘 ${sub.daysLeft} 天）`}`;
+      }
+
+      openSubscriptionModal();
+      showSystemToast(`🎉 訂閱授權碼 [${sub.code}] 已成功啟用！`);
+    } else {
+      if (elements.subFeedbackMsg) {
+        elements.subFeedbackMsg.style.display = 'block';
+        elements.subFeedbackMsg.style.color = '#dc2626';
+        elements.subFeedbackMsg.style.background = '#fee2e2';
+        elements.subFeedbackMsg.style.padding = '0.5rem 0.75rem';
+        elements.subFeedbackMsg.style.borderRadius = '6px';
+        elements.subFeedbackMsg.textContent = `❌ ${data.message || '授權碼無效或已到期，請檢查或聯繫 Sunny 教練！'}`;
+      }
+    }
+  } catch (err) {
+    alert(LangManager.t(`連線驗證失敗：${err.message}`));
+  } finally {
+    if (elements.btnVerifySubCode) {
+      elements.btnVerifySubCode.disabled = false;
+      elements.btnVerifySubCode.textContent = '🚀 驗證並啟用';
+    }
+  }
+}
+
+export function copyToClipboardText(text, successMsg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert(LangManager.t(successMsg || '已複製到剪貼簿！'));
+    }).catch(() => {
+      fallbackCopyText(text, successMsg);
+    });
+  } else {
+    fallbackCopyText(text, successMsg);
+  }
+}
+
+function fallbackCopyText(text, successMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    document.execCommand('copy');
+    alert(LangManager.t(successMsg || '已複製到剪貼簿！'));
+  } catch (e) {
+    prompt('請複製以下資訊：', text);
+  }
+  document.body.removeChild(ta);
 }
 
 // 確保不論頁面處於何種載入狀態，均能立即可靠啟動
