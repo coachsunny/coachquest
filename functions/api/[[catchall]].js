@@ -1491,6 +1491,30 @@ export async function handleApiRequest(request, env) {
       };
 
       const logs = await getStoredPracticeLogs(env);
+
+      // 1. 若有提供 liveSessionId，主動清除先前的進行中暫存紀錄
+      const liveSessionId = payload.liveSessionId || body.liveSessionId;
+      if (liveSessionId) {
+        const liveIdx = logs.findIndex(l => l.id === liveSessionId);
+        if (liveIdx >= 0) {
+          logs.splice(liveIdx, 1);
+        }
+      }
+
+      // 2. 自動清理：移除同位學員、同位關主之過渡「進行中練習」重複暫存
+      const logTime = new Date(logEntry.submittedAt).getTime();
+      for (let i = logs.length - 1; i >= 0; i--) {
+        const item = logs[i];
+        if (item.id === logEntry.id) continue;
+        const isLiveItem = item.isLive || (item.id && item.id.startsWith('live_')) || (item.winningReason && item.winningReason.includes('【進行中練習】'));
+        if (isLiveItem && item.studentName === logEntry.studentName && item.bossId === logEntry.bossId) {
+          const itemTime = new Date(item.submittedAt).getTime();
+          if (Math.abs(logTime - itemTime) < 3 * 60 * 60 * 1000) {
+            logs.splice(i, 1);
+          }
+        }
+      }
+
       const existingIdx = logs.findIndex(l => l.id === logEntry.id);
       if (existingIdx >= 0) {
         logs[existingIdx] = logEntry;
@@ -1677,7 +1701,35 @@ export async function handleApiRequest(request, env) {
         });
       }
 
-      const logs = await getStoredPracticeLogs(env);
+      const rawLogs = await getStoredPracticeLogs(env);
+
+      // 自動智慧清理：過濾已具有正式結算紀錄的歷史「進行中練習」殘留暫存，防止後台重複顯示
+      const completedEntries = rawLogs.filter(l => !l.isLive && !(l.id && l.id.startsWith('live_')) && !(l.winningReason && l.winningReason.includes('【進行中練習】')));
+      const logs = [];
+      let didPruneStaleLive = false;
+
+      for (const item of rawLogs) {
+        const isLive = item.isLive || (item.id && item.id.startsWith('live_')) || (item.winningReason && item.winningReason.includes('【進行中練習】'));
+        if (isLive) {
+          const itemTime = new Date(item.submittedAt).getTime();
+          const hasFinished = completedEntries.some(c => 
+            c.studentName === item.studentName &&
+            c.bossId === item.bossId &&
+            Math.abs(new Date(c.submittedAt).getTime() - itemTime) < 3 * 60 * 60 * 1000 &&
+            Math.abs((c.turns || 0) - (item.turns || 0)) <= 3
+          );
+          if (hasFinished) {
+            didPruneStaleLive = true;
+            continue;
+          }
+        }
+        logs.push(item);
+      }
+
+      if (didPruneStaleLive) {
+        saveStoredPracticeLogs(env, logs).catch(() => {});
+      }
+
       const search = (url.searchParams.get('search') || '').toLowerCase().trim();
       const boss = (url.searchParams.get('boss') || '').trim();
       const captured = (url.searchParams.get('captured') || 'all').trim();

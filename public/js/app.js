@@ -3,7 +3,7 @@
 // 支援單人挑戰與三大多人連線對決模式 (A: 競速, B: 真人, C: 雙打)
 // ========================================================
 
-import { CATEGORIES, BOSSES, getBossById, getBossesByCategory } from './bosses.js';
+import { CATEGORIES, BOSSES, getBossById, getBossesByCategory, getBossOpening } from './bosses.js';
 import { InventoryManager } from './inventory.js';
 import { LeaderboardManager } from './leaderboard.js';
 import { MultiplayerManager } from './multiplayer.js';
@@ -619,10 +619,11 @@ function launchMultiplayerBattle(room) {
     if (elements.oppHpFill) elements.oppHpFill.style.width = '100%';
 
     // 開場白
+    const opening = getBossOpening(state.selectedBoss);
     const firstMsg = {
       role: 'assistant',
-      content: state.selectedBoss.openingStatement || state.selectedBoss.openingDialogue || '……',
-      innerThought: state.selectedBoss.firstInnerThought || '（我要看你們誰能說服我……）'
+      content: opening.dialogue,
+      innerThought: opening.innerThought
     };
     state.dialogueHistory.push(firstMsg);
     appendMessageToChat(firstMsg);
@@ -935,7 +936,12 @@ export function startBossBattle(bossId) {
     const cat = CATEGORIES.find(c => c.id === boss.category);
     elements.battleBossCategory.textContent = cat ? `${cat.icon} ${cat.name}` : '';
   }
-  if (elements.battleScenarioBrief) elements.battleScenarioBrief.textContent = `場景：${boss.scenario}`;
+  const opening = getBossOpening(boss);
+  if (elements.battleScenarioBrief) {
+    elements.battleScenarioBrief.textContent = opening.mood 
+      ? `場景：${boss.scenario}（${opening.mood}）` 
+      : `場景：${boss.scenario}`;
+  }
   if (elements.battleWeaknessPill) {
     const fwName = (boss.framework && boss.framework.name) || boss.weaknessName || '非暴力溝通';
     elements.battleWeaknessPill.textContent = `心防弱點：${fwName}`;
@@ -950,8 +956,8 @@ export function startBossBattle(bossId) {
 
   const firstMsg = {
     role: 'assistant',
-    content: boss.openingStatement || boss.openingDialogue || '……你找我？',
-    innerThought: boss.firstInnerThought || '（哼，我倒要看看你今天打算怎麼說服我……）'
+    content: opening.dialogue,
+    innerThought: opening.innerThought
   };
   state.dialogueHistory.push(firstMsg);
   appendMessageToChat(firstMsg);
@@ -1443,6 +1449,7 @@ function renderEvaluationView(evalData) {
   updatePracticeLogsNavBadge();
   // 自動非同步上傳實戰練習對話與 ICF 分析至後台雲端
   syncPracticeLogToBackend(boss, evalData, state.dialogueHistory, battleResult.logId);
+  state.currentBattleSessionId = null; // 結算完成，重設當前進行中 session ID，防止重複記錄
 
   switchView('evaluation');
 
@@ -2480,6 +2487,7 @@ async function syncPracticeLogToBackend(boss, evalData, dialogueHistory, logId) 
     const cleanDialogue = Array.isArray(dialogueHistory) ? JSON.parse(JSON.stringify(dialogueHistory)) : [];
     const payload = {
       id: logId,
+      liveSessionId: state.currentBattleSessionId, // 關聯進行中暫存 ID，後端將自動替換/清理暫存
       studentName: player.nickname || '冒險者教練',
       studentAvatar: player.avatar || '🧙‍♂️',
       bossId: boss.id,
