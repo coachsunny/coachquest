@@ -64,6 +64,7 @@ const elements = {
   btnCloseDetailModal: document.getElementById('btnCloseDetailModal'),
   btnCloseDetailModalBottom: document.getElementById('btnCloseDetailModalBottom'),
   btnDownloadDetailMd: document.getElementById('btnDownloadDetailMd'),
+  btnDownloadDetailPdf: document.getElementById('btnDownloadDetailPdf'),
   btnCopyDetailText: document.getElementById('btnCopyDetailText'),
 
   // 訂閱建立彈窗
@@ -228,6 +229,9 @@ function bindEvents() {
   // 詳情彈窗內下載與複製
   elements.btnDownloadDetailMd?.addEventListener('click', () => {
     if (viewingLog) downloadLogMarkdown(viewingLog);
+  });
+  elements.btnDownloadDetailPdf?.addEventListener('click', () => {
+    if (viewingLog) exportLogPdf(viewingLog);
   });
   elements.btnCopyDetailText?.addEventListener('click', () => {
     if (viewingLog) copyLogTranscript(viewingLog);
@@ -492,14 +496,23 @@ function openDetailModal(log) {
   elements.modalLogTitle.textContent = `📜 【${log.studentName}】對決【${log.bossName}】對話實錄`;
 
   let transcriptHtml = '';
+  const suggMap = getTurnSuggestionsMap(log);
   if (log.dialogueHistory && log.dialogueHistory.length > 0) {
     let round = 1;
     transcriptHtml = log.dialogueHistory.map(msg => {
       if (msg.role === 'user') {
+        const sugg = suggMap[round] || getFallbackSuggestion(msg.content, round);
         const h = `
           <div class="chat-bubble-turn turn-user">
             <div class="turn-role">${log.studentAvatar || '🧙‍♂️'} 教練學員【${escapeHtml(log.studentName)}】（回合 ${round}）</div>
             <div>${escapeHtml(msg.content)}</div>
+            ${sugg && sugg.betterPhrasing ? `
+              <div class="turn-master-suggestion">
+                <div class="sugg-title">💡 ICF 大師級示範問句</div>
+                <div class="sugg-phrasing">${escapeHtml(sugg.betterPhrasing)}</div>
+                ${sugg.rationale ? `<div class="sugg-rationale">🎯 <b>設計心法：</b>${escapeHtml(sugg.rationale)}</div>` : ''}
+              </div>
+            ` : ''}
           </div>
         `;
         round++;
@@ -659,11 +672,69 @@ function handleExportAllJson() {
   URL.revokeObjectURL(url);
 }
 
+// ========================================================
+// ICF 建議金句與示範輔助函數 (與學員端完全一致)
+// ========================================================
+function getTurnSuggestionsMap(logOrEval) {
+  const map = {};
+  if (!logOrEval) return map;
+
+  const rawList = Array.isArray(logOrEval.turnSuggestions)
+    ? logOrEval.turnSuggestions
+    : (logOrEval.evaluation && Array.isArray(logOrEval.evaluation.turnSuggestions)
+        ? logOrEval.evaluation.turnSuggestions
+        : []);
+
+  rawList.forEach((item, idx) => {
+    if (!item) return;
+    const turnKey = Number(item.turn) || (idx + 1);
+    map[turnKey] = {
+      turn: turnKey,
+      userOriginal: item.userOriginal || '',
+      betterPhrasing: item.betterPhrasing || '',
+      rationale: item.rationale || ''
+    };
+  });
+
+  return map;
+}
+
+function getFallbackSuggestion(userContent, turnNum) {
+  const text = (userContent || '').trim();
+  if (text.includes('為什麼') || text.includes('怎么') || text.includes('為何')) {
+    return {
+      turn: turnNum,
+      betterPhrasing: '「聽到你這麼說，我能感受到這對你非常重要。想邀請你聊聊，當這個情況發生時，你心中最在意或渴望的是什麼？」',
+      rationale: 'ICF 提問原則：將質問性質的『為什麼』轉換為中立且安全的『什麼』，引導學員從防衛轉向探索內心最看重的價值。'
+    };
+  }
+  if (!text.includes('？') && !text.includes('?')) {
+    return {
+      turn: turnNum,
+      betterPhrasing: '「我聽見了你在這個過程中的付出與不容易。如果我們退一步來看，這份挑戰背後，你最希望看見什麼樣的轉機？」',
+      rationale: 'ICF 傾聽原則：給予肯定並懸置給建議的衝動，透過強有力開放問句，把思維焦點交還給對方自主探索。'
+    };
+  }
+  if (text.length < 10) {
+    return {
+      turn: turnNum,
+      betterPhrasing: '「請多和我說說那種感覺？如果給這個感受一個名字，它會是什麼？」',
+      rationale: 'ICF 探索原則：透過隱喻與深入追問，引導當事人具象化內在體驗，創造覺察空間。'
+    };
+  }
+  return {
+    turn: turnNum,
+    betterPhrasing: '「這是一個很有深度的切入點。除了剛才提到的，還有哪些可能性或未被注意到的盲點，是如果現在被看見會對你帶來最大突破的？」',
+    rationale: 'ICF 視角重構：擴大對方的覺察範圍，促使當事人跳脫既有慣性框架，看見更廣闊的潛力空間。'
+  };
+}
+
 // 下載個別 Markdown
 function downloadLogMarkdown(log) {
   const dateStr = new Date(log.submittedAt || log.date).toLocaleString('zh-TW', { hour12: false });
   const isCaptured = log.isCaptured;
   const dims = log.dimensions || log.dimensionScores || {};
+  const suggMap = getTurnSuggestionsMap(log);
 
   let md = `# 🎮 CoachQuest 教練實戰對話練習督導復盤報告\n\n`;
   md += `> **練習時間**：${dateStr}\n`;
@@ -701,6 +772,15 @@ function downloadLogMarkdown(log) {
       if (msg.role === 'user') {
         md += `### 🔹 回合 ${round} · 教練發言\n`;
         md += `**${log.studentAvatar || '🧙‍♂️'} ${log.studentName}**：\n> ${msg.content.replace(/\n/g, '\n> ')}\n\n`;
+        const sugg = suggMap[round] || getFallbackSuggestion(msg.content, round);
+        if (sugg && sugg.betterPhrasing) {
+          md += `> 💡 **ICF 大師級示範問句**：\n> 「${sugg.betterPhrasing.replace(/^「|」$/g, '')}」\n>\n`;
+          if (sugg.rationale) {
+            md += `> 🎯 **設計心法與原理**：${sugg.rationale}\n\n`;
+          } else {
+            md += `\n`;
+          }
+        }
         round++;
       } else {
         md += `**${log.bossAvatar || '👤'} ${log.bossName}**：\n${msg.content}\n\n`;
@@ -728,31 +808,195 @@ function downloadLogMarkdown(log) {
   URL.revokeObjectURL(url);
 }
 
-// 複製全文
+// 複製全文 (含 ICF 大師示範)
 function copyLogTranscript(log) {
   const dateStr = new Date(log.submittedAt || log.date).toLocaleString('zh-TW', { hour12: false });
+  const suggMap = getTurnSuggestionsMap(log);
   let text = `【CoachQuest 導師督導復盤逐字稿】\n`;
   text += `學員：${log.studentName}\n關主：${log.bossName} (${log.bossTitle || ''})\n時間：${dateStr}\n成績：${log.score}分 (${log.isCaptured ? '成功收攏' : '未收攏'})\n`;
   if (log.bestCoachQuote) text += `金句：「${log.bestCoachQuote}」\n`;
   if (log.winningReason) text += `突破分析：${log.winningReason}\n`;
   if (log.advice) text += `導師建議：${log.advice}\n`;
-  text += `\n--- 逐字稿 ---\n`;
+  text += `\n--- 逐字稿與 ICF 大師示範 ---\n`;
 
-  (log.dialogueHistory || []).forEach((m, idx) => {
+  let round = 1;
+  (log.dialogueHistory || []).forEach((m) => {
     if (m.role === 'user') {
-      text += `\n[教練] ${log.studentName}：\n${m.content}\n`;
+      text += `\n[回合 ${round}] 教練 ${log.studentName}：\n${m.content}\n`;
+      const sugg = suggMap[round] || getFallbackSuggestion(m.content, round);
+      if (sugg && sugg.betterPhrasing) {
+        text += `  💡 大師示範：${sugg.betterPhrasing}\n`;
+        if (sugg.rationale) {
+          text += `  🎯 設計心法：${sugg.rationale}\n`;
+        }
+      }
+      round++;
     } else {
-      text += `[關主] ${log.bossName}：\n${m.content}\n`;
-      if (m.innerThought) text += `(💭 關主心聲：${m.innerThought})\n`;
+      text += `\n[關主] ${log.bossName}：\n${m.content}\n`;
+      if (m.innerThought) text += `  💭 關主心聲：${m.innerThought}\n`;
     }
   });
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(() => {
-      alert('📋 逐字稿全文已複製到剪貼簿！');
+      alert('📋 逐字稿全文與大師示範已複製到剪貼簿！');
     });
   } else {
     prompt('請複製以下內容：', text);
+  }
+}
+
+// 匯出/列印 PDF 報告
+function exportLogPdf(log) {
+  const dateStr = new Date(log.submittedAt || log.date).toLocaleString('zh-TW', { hour12: false });
+  const isCaptured = log.isCaptured;
+  const dims = log.dimensions || log.dimensionScores || {};
+  const suggMap = getTurnSuggestionsMap(log);
+
+  let roundsHtml = '';
+  if (log.dialogueHistory && log.dialogueHistory.length > 0) {
+    let round = 1;
+    for (const msg of log.dialogueHistory) {
+      if (msg.role === 'user') {
+        const sugg = suggMap[round] || getFallbackSuggestion(msg.content, round);
+        roundsHtml += `
+          <div style="page-break-inside: avoid; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; padding: 12px; background: #ffffff;">
+            <div style="font-weight: 700; color: #0284c7; font-size: 13px; margin-bottom: 4px;">
+              ${log.studentAvatar || '🧙‍♂️'} 教練學員【${escapeHtml(log.studentName)}】（回合 ${round}）
+            </div>
+            <div style="background: #f0fdf4; border-left: 3px solid #22c55e; padding: 8px 12px; border-radius: 4px; font-size: 13px; color: #1e293b; margin-bottom: 8px;">
+              ${escapeHtml(msg.content)}
+            </div>
+            ${sugg && sugg.betterPhrasing ? `
+              <div style="background: #fffdf5; border: 1px solid #fde68a; border-left: 3px solid #f59e0b; border-radius: 6px; padding: 8px 10px; font-size: 12px;">
+                <div style="color: #b45309; font-weight: 700; margin-bottom: 4px;">💡 ICF 大師級示範問句</div>
+                <div style="color: #78350f; font-weight: 600; line-height: 1.45; margin-bottom: 4px;">${escapeHtml(sugg.betterPhrasing)}</div>
+                ${sugg.rationale ? `<div style="color: #92400e; font-size: 11.5px; line-height: 1.4;">🎯 <b>設計心法：</b>${escapeHtml(sugg.rationale)}</div>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+        round++;
+      } else {
+        roundsHtml += `
+          <div style="page-break-inside: avoid; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; padding: 12px; background: #f8fafc;">
+            <div style="font-weight: 700; color: #4f46e5; font-size: 13px; margin-bottom: 4px;">
+              ${log.bossAvatar || '👤'} 關主【${escapeHtml(log.bossName)}】
+            </div>
+            <div style="background: #ffffff; border-left: 3px solid #6366f1; padding: 8px 12px; border-radius: 4px; font-size: 13px; color: #1e293b; margin-bottom: 6px;">
+              ${escapeHtml(msg.content)}
+            </div>
+            ${msg.innerThought ? `
+              <div style="background: #fffbeb; border-left: 3px solid #f59e0b; padding: 6px 10px; border-radius: 4px; font-size: 12px; color: #b45309; font-style: italic;">
+                💭 關主心聲：${escapeHtml(msg.innerThought)}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+    }
+  }
+
+  const printHtml = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>CoachQuest 練習復盤報告 - ${escapeHtml(log.studentName)}</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif; color: #1e293b; line-height: 1.5; padding: 0; margin: 0; }
+    .header { background: #1e293b; color: white; padding: 18px 20px; border-radius: 10px; margin-bottom: 18px; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; background: ${isCaptured ? '#10b981' : '#ef4444'}; color: white; }
+    .dim-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+    .dim-table th, .dim-table td { border: 1px solid #e2e8f0; padding: 8px 10px; font-size: 12.5px; text-align: left; }
+    .dim-table th { background: #f1f5f9; }
+    @media print { .no-print { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom: 15px; padding: 10px; background: #e0e7ff; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+    <span style="font-size: 13px; color: #3730a3;">💡 提示：點擊右側按鈕即可開啟瀏覽器列印視窗，請在目的地選擇「另存為 PDF」。</span>
+    <button onclick="window.print()" style="padding: 6px 14px; background: #4f46e5; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">🖨️ 立即列印 / 存為 PDF</button>
+  </div>
+  <div class="header">
+    <h2 style="margin: 0 0 6px 0; font-size: 20px;">🎮 CoachQuest 教練實戰對話練習督導復盤報告</h2>
+    <div style="font-size: 12.5px; color: #cbd5e1;">
+      學員教練：<b>${escapeHtml(log.studentName)}</b> | 挑戰關主：<b>${escapeHtml(log.bossName)}</b> | 練習時間：${dateStr} | 
+      <span class="badge">${isCaptured ? '🔴 成功突破收攏' : '💨 心防尚未突破'} ${log.score}分</span>
+    </div>
+  </div>
+  ${log.bestCoachQuote ? `
+    <div style="margin-bottom: 14px;">
+      <h4 style="margin: 0 0 4px 0; font-size: 13px; color: #64748b;">✨ 破心教練金句</h4>
+      <div style="background: #fdf4ff; border-left: 4px solid #c026d3; padding: 8px 12px; font-style: italic; color: #701a75; font-size: 13px; border-radius: 4px;">
+        「${escapeHtml(log.bestCoachQuote)}」
+      </div>
+    </div>
+  ` : ''}
+  ${log.winningReason ? `
+    <div style="margin-bottom: 14px;">
+      <h4 style="margin: 0 0 4px 0; font-size: 13px; color: #64748b;">🎯 突破防線關鍵復盤</h4>
+      <p style="margin: 0; font-size: 12.5px; color: #334155; line-height: 1.5;">${escapeHtml(log.winningReason)}</p>
+    </div>
+  ` : ''}
+  ${log.advice ? `
+    <div style="margin-bottom: 14px;">
+      <h4 style="margin: 0 0 4px 0; font-size: 13px; color: #64748b;">💡 導師指導與調整建議</h4>
+      <p style="margin: 0; font-size: 12.5px; color: #334155; line-height: 1.5;">${escapeHtml(log.advice)}</p>
+    </div>
+  ` : ''}
+  <div style="margin-bottom: 14px;">
+    <h4 style="margin: 0 0 6px 0; font-size: 13px; color: #64748b;">📊 ICF 教練核心溝通能力五維度分析</h4>
+    <table class="dim-table">
+      <tr>
+        <th>深度同理心</th>
+        <th>有效傾聽</th>
+        <th>提問引導</th>
+        <th>視角重構</th>
+        <th>行動激發</th>
+      </tr>
+      <tr>
+        <td><b>${dims.empathy || 75} 分</b></td>
+        <td><b>${dims.listening || 75} 分</b></td>
+        <td><b>${dims.questioning || 70} 分</b></td>
+        <td><b>${dims.reframing || 70} 分</b></td>
+        <td><b>${dims.action_drive || 65} 分</b></td>
+      </tr>
+    </table>
+  </div>
+  <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;">
+    📜 完整對話逐字稿與 ICF 大師級示範 (Transcript & Coaching Suggestions)
+  </h4>
+  <div>
+    ${roundsHtml}
+  </div>
+  <div style="margin-top: 20px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 8px;">
+    CoachQuest 導師督導管理後台 · 國際教練聯盟 (ICF) 核心能力覆盤系統 · https://coachquest.coachsunny.workers.dev
+  </div>
+</body>
+</html>`;
+
+  const printWin = window.open('', '_blank');
+  if (printWin) {
+    printWin.document.open();
+    printWin.document.write(printHtml);
+    printWin.document.close();
+    setTimeout(() => {
+      printWin.focus();
+      printWin.print();
+    }, 500);
+  } else {
+    const blob = new Blob([printHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CoachQuest_復盤報告_${log.studentName}_${log.bossName}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('📄 報告已生成！因瀏覽器攔截開窗，已自動為您下載 HTML 報告檔，開啟後按 Ctrl+P 即可直接存為 PDF！');
   }
 }
 
