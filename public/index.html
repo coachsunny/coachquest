@@ -1107,6 +1107,119 @@
         </div>
       </div>
 
+      <!-- 畫面 3B: 第三關・對話實戰關 -->
+      <div class="nlp-screen hidden" id="nlpScreenDialogue">
+        <div class="nlp-arena-flow-header" style="flex-wrap: wrap; gap: 0.6rem;">
+          <div class="flow-left" style="flex-wrap: wrap; gap: 0.5rem;">
+            <button class="btn btn-outline btn-sm" id="btnNlpDlgBackHub">⬅ 返回模式選擇</button>
+            <span class="flow-title">⚔️ 第三關：NLP 對話實戰演練</span>
+          </div>
+          <div class="flow-right" style="flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+            <!-- 選擇 16 位關主 -->
+            <select id="nlpDlgBossSelect" class="nlp-category-select" style="min-width: 170px;">
+              <optgroup label="💼 職場協作篇">
+                <option value="boss_work_1">🦔 防禦刺蝟・研發小陳</option>
+                <option value="boss_work_2">🌪️ 焦慮旋風・產品林經理</option>
+                <option value="boss_work_3">🪨 迷茫頑石・資深老張</option>
+                <option value="boss_work_4">🌧️ 玻璃心新人・小雨</option>
+              </optgroup>
+              <optgroup label="👨‍👩‍👧 親子教養篇">
+                <option value="boss_parenting_1">🎮 閉門刺蝟・高一兒子翔翔</option>
+                <option value="boss_parenting_2">🚁 焦慮直升機・全職媽媽淑芬</option>
+                <option value="boss_parenting_3">💼 缺席提款機・台商父親志強</option>
+                <option value="boss_parenting_4">📚 完美主義少女・高三女兒小琳</option>
+              </optgroup>
+              <optgroup label="💍 伴侶親密篇">
+                <option value="boss_couple_1">🧊 冷戰冰川・疲憊妻子雅婷</option>
+                <option value="boss_couple_2">🦤 逃避鴕鳥・沉默丈夫俊傑</option>
+                <option value="boss_couple_3">🔍 疑心偵探・女友芳芳</option>
+                <option value="boss_couple_4">🦁 大男人強權・男友阿豪</option>
+              </optgroup>
+              <optgroup label="🌱 個人突破篇">
+                <option value="boss_personal_1">🎭 絕望冒牌者・創業青年家豪</option>
+                <option value="boss_personal_2">🕊️ 空巢迷航・全職主婦慧琳</option>
+                <option value="boss_personal_3">🧗‍♂️ 困頓中年經理・志偉</option>
+                <option value="boss_personal_4">👴 退休失落・老廠長老劉</option>
+              </optgroup>
+            </select>
+
+            <!-- 選擇難易度 -->
+            <select id="nlpDlgDiffSelect" class="nlp-category-select" style="min-width: 130px;">
+              <option value="normal">🟢 見習 (60 HP)</option>
+              <option value="hard">🟡 專業 (80 HP)</option>
+              <option value="master">🔴 大師 (100 HP)</option>
+            </select>
+
+            <button class="btn btn-success btn-sm" id="btnNlpDlgFinish">
+              🏁 結算對話報告
+            </button>
+          </div>
+        </div>
+
+        <!-- 關主當前心防與情境資訊卡 -->
+        <div class="nlp-dialogue-profile-card" style="background:#fff; border:1.5px solid #e2e8f0; border-radius:14px; padding:1rem 1.25rem; margin-top:0.75rem; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+          <div style="display: flex; gap: 0.85rem; align-items: center; flex-wrap: wrap;">
+            <div class="speaker-avatar" id="nlpDlgBossAvatar" style="font-size: 2.2rem; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; background: #f3e8ff; border-radius: 12px; border: 1.5px solid #d8b4fe;">🦔</div>
+            <div style="flex: 1; min-width: 200px;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <h4 id="nlpDlgBossName" style="margin: 0; font-size: 1.15rem; color: #1e1b4b; font-weight: 800;">防禦刺蝟・研發小陳</h4>
+                <span id="nlpDlgBossTitle" style="font-size: 0.78rem; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px;">後端工程師</span>
+              </div>
+              <div id="nlpDlgBossScenario" style="font-size: 0.8rem; color: #475569; margin-top: 0.25rem;">核心模組進度已延期四天未交，且未主動同步狀態，主管啟動一對一面談。</div>
+            </div>
+            
+            <!-- 心防血條 -->
+            <div class="nlp-hp-box" style="min-width: 170px; background: #f8fafc; padding: 0.6rem 0.85rem; border-radius: 10px; border: 1px solid #e2e8f0;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.3rem;">
+                <span style="color: #64748b;">🛡️ 關主心理防衛</span>
+                <span id="nlpDlgHpText" style="color: #dc2626;">60 / 60 HP</span>
+              </div>
+              <div style="height: 10px; background: #fee2e2; border-radius: 99px; overflow: hidden;">
+                <div id="nlpDlgHpBar" style="height: 100%; width: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b); border-radius: 99px; transition: width 0.4s ease;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 維度轉換核心卡點提示 (How vs Desire) -->
+          <div style="margin-top: 0.75rem; background: #faf5ff; border: 1px dashed #d8b4fe; border-radius: 8px; padding: 0.6rem 0.85rem; font-size: 0.8rem; display: flex; flex-direction: column; gap: 0.25rem;">
+            <div><span style="color: #9333ea; font-weight: 700;">🔒 困在表層做法：</span><span id="nlpDlgStuckHow" style="color: #475569;">進度延期不敢主動同步，認為說了也是被罵，乾脆被動防禦。</span></div>
+            <div><span style="color: #059669; font-weight: 700;">✨ 深層核心渴望：</span><span id="nlpDlgCoreDesire" style="color: #1e293b; font-weight: 600;">渴望專業價值被肯定與看見，渴望獲得客觀的資源與支援。</span></div>
+          </div>
+        </div>
+
+        <!-- 對話氣泡訊息流容器 -->
+        <div class="nlp-chat-box" id="nlpDlgChatBox" style="min-height: 280px; max-height: 480px; overflow-y: auto; margin: 1rem 0; padding: 1rem; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 1rem;">
+          <!-- 動態渲染對話訊息 -->
+        </div>
+
+        <!-- 錦囊推薦與輸入區 -->
+        <div class="nlp-chat-controls">
+          <!-- 錦囊快捷抽屜 (可收合/展開) -->
+          <div id="nlpDlgTacticsBox" style="background: #fff; border: 1.5px solid #e9d5ff; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+              <span style="font-size: 0.82rem; font-weight: 800; color: #7e22ce;">💡 當前回合 NLP 換框錦囊推薦：</span>
+              <button class="btn btn-outline btn-sm" id="btnCloseNlpDlgTactics" style="padding: 1px 6px; font-size: 0.7rem;">✕ 隱藏</button>
+            </div>
+            <div id="nlpDlgTacticsList" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+          </div>
+
+          <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="inputNlpDialogue" style="font-size: 0.8rem; font-weight: 700; color: #334155; margin: 0;">💬 你的教練破框回應話語：</label>
+                <button type="button" class="btn btn-outline btn-sm" id="btnToggleNlpDlgTactics" style="font-size: 0.75rem; padding: 2px 8px; border-color: #a855f7; color: #7e22ce; font-weight: 700;">
+                  🪄 打開 14 式換框錦囊
+                </button>
+              </div>
+              <textarea id="inputNlpDialogue" class="nlp-textarea" rows="2" placeholder="輸入你想對關主說的教練話語……（Enter 發送，Shift+Enter 換行）" style="resize: vertical; min-height: 58px;"></textarea>
+            </div>
+            <button class="btn btn-primary" id="btnNlpDialogueSend" style="padding: 0.75rem 1.4rem; height: 58px; font-weight: 700; white-space: nowrap; background: linear-gradient(135deg, #9333ea, #4f46e5);">
+              🚀 發送回應
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 畫面 4: 修煉結算復盤報告 -->
       <div class="nlp-screen hidden" id="nlpScreenReport">
         <div class="nlp-report-container">

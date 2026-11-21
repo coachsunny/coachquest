@@ -16,11 +16,15 @@ import {
 import {
   NLP_PATTERNS,
   NLP_QUESTION_BANK,
+  NLP_BOSS_PRESETS,
+  getNlpBossPreset,
   getNlpPatternById,
   getRandomNlpQuestion,
   buildNlpListeningEvaluationPrompt,
   buildNlpResponseEvaluationPrompt,
-  buildNlpSummaryReportPrompt
+  buildNlpSummaryReportPrompt,
+  buildNlpDialogueTurnPrompt,
+  buildNlpDialogueReportPrompt
 } from '../../lib/nlp-engine.js';
 
 const GEMINI_CANDIDATE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
@@ -1506,6 +1510,178 @@ export async function handleApiRequest(request, env) {
         await saveStoredPracticeLogs(env, logs);
       } catch (logErr) {
         console.warn('NLP 練習紀錄後台儲存失敗:', logErr);
+      }
+
+      return new Response(JSON.stringify({ ok: true, report: finalReport }), { headers: corsHeaders });
+    }
+
+    // 5F. GET /api/nlp/bosses (取得 16 位實戰關主專屬 NLP 預設資料)
+    if (pathname === '/nlp/bosses' && request.method === 'GET') {
+      return new Response(JSON.stringify({
+        ok: true,
+        bosses: NLP_BOSS_PRESETS
+      }), { headers: corsHeaders });
+    }
+
+    // 5G. POST /api/nlp/dialogue/turn (第三關：NLP 對話實戰回合角色扮演與評估)
+    if (pathname === '/nlp/dialogue/turn' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'exclusive');
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || 'NLP 對話實戰關需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
+      const { bossId = 'boss_work_1', difficulty = 'normal', dialogueHistory = [], userMessage = '' } = body;
+      const boss = getNlpBossPreset(bossId);
+      const config = resolveApiConfig(body, env);
+      const systemPrompt = buildNlpDialogueTurnPrompt({ boss, difficulty, dialogueHistory, userMessage });
+
+      try {
+        const turnResult = await callLlmApi({
+          config,
+          systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `【教練最新發言】：『${userMessage}』\n請依據關主性格與 NLP 換框評鑑標準，生成關主下次回應與評核結果。`
+          }]
+        });
+
+        return new Response(JSON.stringify({ ok: true, turnResult }), { headers: corsHeaders });
+      } catch (err) {
+        console.error('NLP 對話實戰回合執行失敗:', err);
+        return new Response(JSON.stringify({
+          ok: true,
+          turnResult: {
+            bossReply: `「……你這麼說，我心裡稍微好受了一點。但我還是很擔心，萬一真的搞砸了怎麼辦？」`,
+            innerThought: `（他好像真的能理解我的不容易，沒有直接罵我或否定我，或許我可以聽聽看他怎麼說……）`,
+            mood: `肩膀微微放鬆，眼神中的防衛稍退，流露出一絲無奈與疲憊`,
+            hpDeduction: 20,
+            turnScore: 82,
+            identifiedPattern: {
+              id: 'intent',
+              name: '正面意圖 (Positive Intention)',
+              isEffective: true,
+              brief: '肯定了對方的出發點與在乎，減緩了對抗張力。'
+            },
+            coachFeedback: {
+              strength: '成功表達了同理與接納，建立起安全的對話空間。',
+              nextStepAdvice: '下次回合可嘗試運用【重新定義】或【後果預測】，引導對方從單一做法轉向多元可能。'
+            },
+            suggestedNextPatterns: [
+              { id: 'redefine', name: '重新定義', hint: '重新定義問題的本質，開闢新視角' },
+              { id: 'outcome', name: '另一成果', hint: '引導對方思考長遠的真正重要目標' }
+            ],
+            isCaptured: false
+          }
+        }), { headers: corsHeaders });
+      }
+    }
+
+    // 5H. POST /api/nlp/dialogue/report (第三關：NLP 對話實戰結算復盤報告與自動歸檔)
+    if (pathname === '/nlp/dialogue/report' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'exclusive');
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || 'NLP 對話結算報告需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
+      const { bossId = 'boss_work_1', difficulty = 'normal', dialogueHistory = [], studentName = '學員教練' } = body;
+      const boss = getNlpBossPreset(bossId);
+      const config = resolveApiConfig(body, env);
+      const systemPrompt = buildNlpDialogueReportPrompt({ boss, difficulty, dialogueHistory, studentName });
+
+      let reportData = null;
+      try {
+        reportData = await callLlmApi({
+          config,
+          systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `請為學員【${studentName}】與關主【${boss.name}】的對話實戰生成 NLP 深度復盤報告。`
+          }]
+        });
+      } catch (err) {
+        console.warn('NLP 對話報告生成備援:', err);
+      }
+
+      const totalTurns = (dialogueHistory || []).filter(m => m.role === 'user').length || 1;
+      const finalReport = {
+        studentName,
+        bossId,
+        bossName: boss.name,
+        bossAvatar: boss.avatar,
+        bossTitle: boss.title,
+        difficulty,
+        mode: 'dialogue',
+        modeName: '第三關・NLP 對話實戰專項',
+        overallScore: (reportData && Number(reportData.overallScore)) || 85,
+        masteryTitle: (reportData && reportData.masteryTitle) || 'NLP 語言魔力 · 破框實戰大師',
+        isSuccess: (reportData && reportData.isSuccess !== undefined) ? reportData.isSuccess : true,
+        summaryCritique: (reportData && reportData.summaryCritique) || `在本次與【${boss.name}】的高難度實戰對話中，你展現了優雅的語言換框功底。成功化解對方受困於「${boss.surfaceHow}」的執念，引導其看見「${boss.coreDesire}」的深層意圖。`,
+        radarDimensions: (reportData && reportData.radarDimensions) || {
+          empathyPacing: 86,
+          intentionCapture: 88,
+          reframingPrecision: 85,
+          dimensionShift: 84,
+          linguisticImpact: 87
+        },
+        patternsUsed: (reportData && reportData.patternsUsed) || [
+          { name: '正面意圖', count: 2, impact: '卓越' },
+          { name: '重新定義', count: 1, impact: '關鍵突破' }
+        ],
+        strengths: (reportData && reportData.strengths) || [
+          '敏銳捕捉對方的核心防禦與焦慮，展現深厚同理共情力',
+          '換框精準自然，成功開啟全新思維空間'
+        ],
+        growthRecommendations: (reportData && reportData.growthRecommendations) || [
+          '可進一步結合『反例法』與『層次提升』，擴大關主的視野維度',
+          '在對話轉折處給予更多靜默留白，促發關主深層內化'
+        ],
+        turnHighlights: (reportData && reportData.turnHighlights) || []
+      };
+
+      // 歸檔至管理後台歷史紀錄 (方便 Sunny 教練檢視學員的實戰紀錄)
+      try {
+        const logs = await getStoredPracticeLogs(env);
+        const logId = 'nlp_dlg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const logEntry = {
+          id: logId,
+          studentName,
+          studentAvatar: '🪄',
+          bossId: `nlp_${boss.id}`,
+          bossName: `NLP對話實戰・${boss.name}`,
+          bossAvatar: boss.avatar || '⚔️',
+          bossTitle: boss.title,
+          category: 'nlp_mastery',
+          score: finalReport.overallScore,
+          isCaptured: finalReport.isSuccess,
+          turns: totalTurns,
+          bestCoachQuote: `【${boss.name}】對戰 ` + finalReport.masteryTitle,
+          winningReason: `【NLP對話實戰】榮獲稱號：${finalReport.masteryTitle}，評分 ${finalReport.overallScore} 分`,
+          advice: finalReport.summaryCritique,
+          dimensions: finalReport.radarDimensions,
+          dialogueHistory: dialogueHistory,
+          submittedAt: new Date().toISOString(),
+          clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
+        };
+
+        logs.unshift(logEntry);
+        if (logs.length > 500) logs.length = 500;
+        await saveStoredPracticeLogs(env, logs);
+      } catch (logErr) {
+        console.warn('NLP 對話紀錄後台儲存失敗:', logErr);
       }
 
       return new Response(JSON.stringify({ ok: true, report: finalReport }), { headers: corsHeaders });

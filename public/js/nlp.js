@@ -56,6 +56,28 @@ window.NlpManager = (function() {
       btnViewPatterns: document.getElementById('btnNlpViewPatterns'),
       btnHubViewPatterns: document.getElementById('btnNlpHubViewPatterns'),
 
+      // 第三關：對話實戰關 elements
+      screenDialogue: document.getElementById('nlpScreenDialogue'),
+      btnDlgBackHub: document.getElementById('btnNlpDlgBackHub'),
+      nlpDlgBossSelect: document.getElementById('nlpDlgBossSelect'),
+      nlpDlgDiffSelect: document.getElementById('nlpDlgDiffSelect'),
+      btnDlgFinish: document.getElementById('btnNlpDlgFinish'),
+      dlgBossAvatar: document.getElementById('nlpDlgBossAvatar'),
+      dlgBossName: document.getElementById('nlpDlgBossName'),
+      dlgBossTitle: document.getElementById('nlpDlgBossTitle'),
+      dlgBossScenario: document.getElementById('nlpDlgBossScenario'),
+      dlgStuckHow: document.getElementById('nlpDlgStuckHow'),
+      dlgCoreDesire: document.getElementById('nlpDlgCoreDesire'),
+      dlgHpText: document.getElementById('nlpDlgHpText'),
+      dlgHpBar: document.getElementById('nlpDlgHpBar'),
+      dlgChatBox: document.getElementById('nlpDlgChatBox'),
+      dlgTacticsBox: document.getElementById('nlpDlgTacticsBox'),
+      dlgTacticsList: document.getElementById('nlpDlgTacticsList'),
+      btnToggleDlgTactics: document.getElementById('btnToggleNlpDlgTactics'),
+      btnCloseDlgTactics: document.getElementById('btnCloseNlpDlgTactics'),
+      inputDlg: document.getElementById('inputNlpDialogue'),
+      btnDlgSend: document.getElementById('btnNlpDialogueSend'),
+
       // 傾聽關 elements
       listenCategory: document.getElementById('nlpListenCategory'),
       listenSpeakerAvatar: document.getElementById('nlpListenSpeakerAvatar'),
@@ -133,9 +155,30 @@ window.NlpManager = (function() {
     // Hub 選擇模式
     dom.btnStartListen?.addEventListener('click', () => startPractice('listen'));
     dom.btnStartResponse?.addEventListener('click', () => startPractice('response'));
-    dom.btnStartBattle?.addEventListener('click', startNlpBattle);
+    dom.btnStartBattle?.addEventListener('click', () => startNlpDialogue());
     dom.btnViewPatterns?.addEventListener('click', openPatternsModal);
     dom.btnHubViewPatterns?.addEventListener('click', openPatternsModal);
+
+    // 第三關：對話實戰關動作
+    dom.btnDlgBackHub?.addEventListener('click', showHubScreen);
+    dom.btnDlgFinish?.addEventListener('click', finishDialogueAndGenerateReport);
+    dom.btnDlgSend?.addEventListener('click', handleNlpDialogueSend);
+    dom.inputDlg?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleNlpDialogueSend();
+      }
+    });
+    dom.nlpDlgBossSelect?.addEventListener('change', (e) => {
+      startNlpDialogue(e.target.value, dom.nlpDlgDiffSelect?.value || 'normal');
+    });
+    dom.nlpDlgDiffSelect?.addEventListener('change', (e) => {
+      startNlpDialogue(dom.nlpDlgBossSelect?.value || 'boss_work_1', e.target.value);
+    });
+    dom.btnToggleDlgTactics?.addEventListener('click', toggleDlgTacticsDrawer);
+    dom.btnCloseDlgTactics?.addEventListener('click', () => {
+      if (dom.dlgTacticsBox) dom.dlgTacticsBox.style.display = 'none';
+    });
 
     // 傾聽關動作
     dom.btnSubmitListen?.addEventListener('click', submitListening);
@@ -234,6 +277,8 @@ window.NlpManager = (function() {
 
     if (mode === 'listen' || mode === 'response') {
       startPractice(mode);
+    } else if (mode === 'dialogue' || mode === 'battle') {
+      startNlpDialogue();
     } else {
       showHubScreen();
     }
@@ -247,6 +292,7 @@ window.NlpManager = (function() {
     dom.screenHub?.classList.remove('hidden');
     dom.screenListen?.classList.add('hidden');
     dom.screenResponse?.classList.add('hidden');
+    dom.screenDialogue?.classList.add('hidden');
     dom.screenReport?.classList.add('hidden');
   }
 
@@ -259,6 +305,7 @@ window.NlpManager = (function() {
     state.selectedPatternId = '';
 
     dom.screenHub?.classList.add('hidden');
+    dom.screenDialogue?.classList.add('hidden');
     dom.screenReport?.classList.add('hidden');
 
     if (mode === 'listen') {
@@ -270,6 +317,8 @@ window.NlpManager = (function() {
       dom.screenListen?.classList.add('hidden');
       renderPatternTags();
       await loadNextQuestion('response');
+    } else if (mode === 'dialogue') {
+      startNlpDialogue(state.dialogueBossId || 'boss_work_1', state.dialogueDifficulty || 'normal');
     }
   }
 
@@ -798,7 +847,14 @@ window.NlpManager = (function() {
     // 渲染五維度條
     if (dom.reportRadarBars) {
       const dims = report.radarDimensions || {};
-      const dimLabels = {
+      const isDialogue = report.mode === 'dialogue';
+      const dimLabels = isDialogue ? {
+        empathyPacing: '同理跟隨力 (Empathy Pacing)',
+        intentionCapture: '意圖捕捉力 (Intention Capture)',
+        reframingPrecision: '換框精準度 (Reframing Precision)',
+        dimensionShift: '維度轉換力 (Dimension Shift)',
+        linguisticImpact: '語言影響力 (Linguistic Impact)'
+      } : {
         beliefInsight: '觀點洞察力 (Belief Insight)',
         emotionalEmpathy: '情緒共情度 (Emotional Empathy)',
         positiveIntention: '意圖連結度 (Positive Intention)',
@@ -826,7 +882,9 @@ window.NlpManager = (function() {
 
     // 渲染亮點
     if (dom.reportStrengthsList) {
-      const strengths = Array.isArray(report.highlightStrengths) ? report.highlightStrengths : [];
+      const strengths = Array.isArray(report.highlightStrengths) 
+        ? report.highlightStrengths 
+        : (Array.isArray(report.strengths) ? report.strengths : []);
       dom.reportStrengthsList.innerHTML = strengths.map(s => `<li>✨ ${escapeHtml(s)}</li>`).join('');
     }
 
@@ -836,42 +894,80 @@ window.NlpManager = (function() {
       dom.reportRecommendationsList.innerHTML = recs.map(r => `<li>🎯 ${escapeHtml(r)}</li>`).join('');
     }
 
-    // 渲染逐題回顧列表
+    // 渲染逐題/逐回合回顧列表
     if (dom.reportExercisesList) {
-      const exercises = Array.isArray(report.exercises) ? report.exercises : [];
-      let exHtml = '';
-      exercises.forEach((ex, idx) => {
-        const isListen = report.mode === 'listen';
-        exHtml += `
-          <div class="report-exercise-card">
-            <div class="ex-header">
-              <span class="ex-index">第 ${idx + 1} 題</span>
-              <span class="ex-speaker">${ex.question?.avatar || '👤'} ${escapeHtml(ex.question?.speaker || '')}（${escapeHtml(ex.question?.categoryName || '')}）</span>
-              <span class="ex-score-badge">${ex.evaluation?.score || 80}分</span>
-            </div>
-            <div class="ex-statement">『${escapeHtml(ex.question?.statement || '')}』</div>
-            
-            <div class="ex-body">
-              ${isListen ? `
-                <div class="ex-user-answer">
-                  <div><b>學員觀點：</b>${escapeHtml(ex.userBelief || '（未填寫）')}</div>
-                  <div><b>學員情緒：</b>${escapeHtml(ex.userEmotion || '（未填寫）')}</div>
-                  <div><b>學員渴望：</b>${escapeHtml(ex.userNeed || '（未填寫）')}</div>
+      if (report.mode === 'dialogue') {
+        const highlights = Array.isArray(report.turnHighlights) && report.turnHighlights.length > 0 
+          ? report.turnHighlights 
+          : [];
+        let dlgHtml = '';
+        if (highlights.length > 0) {
+          highlights.forEach((h, idx) => {
+            dlgHtml += `
+              <div class="report-exercise-card" style="margin-bottom:1rem; border-left:4px solid #8b5cf6;">
+                <div class="ex-header">
+                  <span class="ex-index">第 ${h.turn || idx + 1} 回合精華</span>
+                  <span class="ex-speaker">⚔️ 破框換框實戰</span>
+                  <span class="ex-score-badge" style="background:#ede9fe; color:#6d28d9;">回合點評</span>
                 </div>
-              ` : `
-                <div class="ex-user-answer">
-                  <div><b>學員破框回應：</b>『${escapeHtml(ex.userResponse || '')}』</div>
-                  <div><b>識別模式：</b>${escapeHtml(ex.evaluation?.identifiedPattern || 'NLP 模式')}</div>
+                <div class="ex-body" style="display:flex; flex-direction:column; gap:0.5rem;">
+                  <div><b>💬 學員回應原句：</b>『${escapeHtml(h.userQuote || '')}』</div>
+                  <div style="color:#7c3aed;"><b>🧠 關主心理觸發：</b>${escapeHtml(h.bossReaction || '')}</div>
+                  <div class="ex-coach-critique"><b>💡 導師即時點評：</b>${escapeHtml(h.mentorComment || '')}</div>
+                  ${h.icfGoldenSentence ? `<div style="background:#ecfdf5; border:1px solid #a7f3d0; padding:8px 12px; border-radius:6px; font-size:0.83rem; color:#065f46;"><b>✨ 大師級示範金句 (ICF Golden Sentence)：</b><br>${escapeHtml(h.icfGoldenSentence)}</div>` : ''}
                 </div>
-              `}
-              <div class="ex-coach-critique">
-                <b>💡 導師點評：</b>${escapeHtml(ex.evaluation?.coachEvaluation || ex.evaluation?.coachCritique || '')}
+              </div>
+            `;
+          });
+        } else if (Array.isArray(report.dialogueHistory) && report.dialogueHistory.length > 0) {
+          dlgHtml += `<div style="background:#f8fafc; padding:1.2rem; border-radius:10px; font-size:0.88rem; line-height:1.75; border:1px solid #e2e8f0;">`;
+          report.dialogueHistory.forEach(m => {
+            const isUser = m.role === 'user';
+            dlgHtml += `
+              <div style="margin-bottom:0.75rem; padding-bottom:0.5rem; border-bottom:1px dashed #e2e8f0; color:${isUser ? '#4338ca' : '#0f172a'};">
+                <b>${isUser ? '🧙‍♂️ 學員教練' : (report.bossName || '關主')}：</b>
+                『${escapeHtml(m.content || '')}』
+              </div>`;
+          });
+          dlgHtml += `</div>`;
+        }
+        dom.reportExercisesList.innerHTML = dlgHtml;
+      } else {
+        const exercises = Array.isArray(report.exercises) ? report.exercises : [];
+        let exHtml = '';
+        exercises.forEach((ex, idx) => {
+          const isListen = report.mode === 'listen';
+          exHtml += `
+            <div class="report-exercise-card">
+              <div class="ex-header">
+                <span class="ex-index">第 ${idx + 1} 題</span>
+                <span class="ex-speaker">${ex.question?.avatar || '👤'} ${escapeHtml(ex.question?.speaker || '')}（${escapeHtml(ex.question?.categoryName || '')}）</span>
+                <span class="ex-score-badge">${ex.evaluation?.score || 80}分</span>
+              </div>
+              <div class="ex-statement">『${escapeHtml(ex.question?.statement || '')}』</div>
+              
+              <div class="ex-body">
+                ${isListen ? `
+                  <div class="ex-user-answer">
+                    <div><b>學員觀點：</b>${escapeHtml(ex.userBelief || '（未填寫）')}</div>
+                    <div><b>學員情緒：</b>${escapeHtml(ex.userEmotion || '（未填寫）')}</div>
+                    <div><b>學員渴望：</b>${escapeHtml(ex.userNeed || '（未填寫）')}</div>
+                  </div>
+                ` : `
+                  <div class="ex-user-answer">
+                    <div><b>學員破框回應：</b>『${escapeHtml(ex.userResponse || '')}』</div>
+                    <div><b>識別模式：</b>${escapeHtml(ex.evaluation?.identifiedPattern || 'NLP 模式')}</div>
+                  </div>
+                `}
+                <div class="ex-coach-critique">
+                  <b>💡 導師點評：</b>${escapeHtml(ex.evaluation?.coachEvaluation || ex.evaluation?.coachCritique || '')}
+                </div>
               </div>
             </div>
-          </div>
-        `;
-      });
-      dom.reportExercisesList.innerHTML = exHtml;
+          `;
+        });
+        dom.reportExercisesList.innerHTML = exHtml;
+      }
     }
   }
 
@@ -884,43 +980,73 @@ window.NlpManager = (function() {
     let md = `# 🪄 CoachQuest NLP 語言魔力回應術・修煉復盤報告\n\n`;
     md += `**學員教練**：${r.studentName}  \n`;
     md += `**訓練專項**：${r.modeName}  \n`;
+    if (r.bossName) md += `**對決關主**：${r.bossName}（${r.difficulty || '普通難度'}）  \n`;
     md += `**榮譽稱號**：${r.masteryTitle}  \n`;
     md += `**綜合得分**：${r.overallScore} 分  \n`;
-    md += `**完成題目數**：${r.totalExercises} 題  \n`;
     md += `**結算時間**：${now}  \n\n`;
 
     md += `## 🌟 大師導師總結評語\n${r.summaryCritique}\n\n`;
 
     md += `## 📊 能力五維度分析\n`;
     const dims = r.radarDimensions || {};
-    md += `- **觀點洞察力**：${dims.beliefInsight || 80}/100\n`;
-    md += `- **情緒共情度**：${dims.emotionalEmpathy || 80}/100\n`;
-    md += `- **意圖連結度**：${dims.positiveIntention || 80}/100\n`;
-    md += `- **換框精妙度**：${dims.reframingMastery || 80}/100\n`;
-    md += `- **破框轉化力**：${dims.transformationDrive || 80}/100\n\n`;
+    if (r.mode === 'dialogue') {
+      md += `- **同理跟隨力**：${dims.empathyPacing || 80}/100\n`;
+      md += `- **意圖捕捉力**：${dims.intentionCapture || 80}/100\n`;
+      md += `- **換框精準度**：${dims.reframingPrecision || 80}/100\n`;
+      md += `- **維度轉換力**：${dims.dimensionShift || 80}/100\n`;
+      md += `- **語言影響力**：${dims.linguisticImpact || 80}/100\n\n`;
+    } else {
+      md += `- **觀點洞察力**：${dims.beliefInsight || 80}/100\n`;
+      md += `- **情緒共情度**：${dims.emotionalEmpathy || 80}/100\n`;
+      md += `- **意圖連結度**：${dims.positiveIntention || 80}/100\n`;
+      md += `- **換框精妙度**：${dims.reframingMastery || 80}/100\n`;
+      md += `- **破框轉化力**：${dims.transformationDrive || 80}/100\n\n`;
+    }
 
+    const strengths = r.highlightStrengths || r.strengths || [];
     md += `## ✨ 卓越亮點\n`;
-    (r.highlightStrengths || []).forEach(s => { md += `- ${s}\n`; });
+    strengths.forEach(s => { md += `- ${s}\n`; });
+
     md += `\n## 🎯 刻意練習指引\n`;
     (r.growthRecommendations || []).forEach(g => { md += `- ${g}\n`; });
-    md += `\n## 🔍 逐題演練與大師解析對照\n`;
 
-    (r.exercises || []).forEach((ex, idx) => {
-      md += `### 題目 ${idx + 1}：${ex.question?.speaker}（${ex.question?.categoryName}）\n`;
-      md += `> 關主話語：『${ex.question?.statement}』\n\n`;
-      if (r.mode === 'listen') {
-        md += `- **學員觀點解析**：${ex.userBelief || '（無）'}\n`;
-        md += `- **學員情緒解析**：${ex.userEmotion || '（無）'}\n`;
-        md += `- **學員渴望解析**：${ex.userNeed || '（無）'}\n`;
-      } else {
-        md += `- **學員破框回應**：『${ex.userResponse}』\n`;
-        md += `- **識別運用模式**：${ex.evaluation?.identifiedPattern || 'NLP 模式'}\n`;
+    if (r.mode === 'dialogue') {
+      md += `\n## ⚔️ 對話實戰回合亮點與示範金句\n`;
+      if (Array.isArray(r.turnHighlights) && r.turnHighlights.length > 0) {
+        r.turnHighlights.forEach((h, idx) => {
+          md += `### 第 ${h.turn || idx + 1} 回合：\n`;
+          md += `- **學員回應**：『${h.userQuote}』\n`;
+          md += `- **關主反應**：${h.bossReaction}\n`;
+          md += `- **導師點評**：${h.mentorComment}\n`;
+          if (h.icfGoldenSentence) {
+            md += `- **大師級示範金句**：${h.icfGoldenSentence}\n`;
+          }
+          md += `\n`;
+        });
+      } else if (Array.isArray(r.dialogueHistory)) {
+        r.dialogueHistory.forEach(m => {
+          md += `> **${m.role === 'user' ? '學員教練' : (r.bossName || '關主')}**：『${m.content}』\n\n`;
+        });
       }
-      md += `- **得分**：${ex.evaluation?.score} 分\n`;
-      md += `- **導師點評**：${ex.evaluation?.coachEvaluation || ex.evaluation?.coachCritique}\n\n`;
-    });
+    } else {
+      md += `\n## 🔍 逐題演練與大師解析對照\n`;
+      (r.exercises || []).forEach((ex, idx) => {
+        md += `### 題目 ${idx + 1}：${ex.question?.speaker}（${ex.question?.categoryName}）\n`;
+        md += `> 關主話語：『${ex.question?.statement}』\n\n`;
+        if (r.mode === 'listen') {
+          md += `- **學員觀點解析**：${ex.userBelief || '（無）'}\n`;
+          md += `- **學員情緒解析**：${ex.userEmotion || '（無）'}\n`;
+          md += `- **學員渴望解析**：${ex.userNeed || '（無）'}\n`;
+        } else {
+          md += `- **學員破框回應**：『${ex.userResponse}』\n`;
+          md += `- **識別運用模式**：${ex.evaluation?.identifiedPattern || 'NLP 模式'}\n`;
+        }
+        md += `- **得分**：${ex.evaluation?.score} 分\n`;
+        md += `- **導師點評**：${ex.evaluation?.coachEvaluation || ex.evaluation?.coachCritique}\n\n`;
+      });
+    }
 
-    md += `---\n*CoachQuest 教練大冒險・語言魔術師修煉場出品*\n`;
+    md += `---\n*CoachQuest 教練大冒險 · NLP 語言魔術師修煉場*\n`;
     return md;
   }
 
@@ -941,18 +1067,566 @@ window.NlpManager = (function() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `NLP修煉報告_${state.currentReport?.studentName}_${Date.now()}.md`;
+    a.download = `NLP實戰報告_${state.currentReport?.studentName || '教練'}_${Date.now()}.md`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  // 第三關：開啟實戰對話關（引導至關主清單並啟動 NLP 戰術錦囊優先模式）
-  function startNlpBattle() {
-    closeNlpArena();
-    if (typeof window.switchView === 'function') {
-      window.switchView('map');
-      if (typeof window.showSystemToast === 'function') {
-        window.showSystemToast('🪄 已啟動 NLP 回應實戰模式：挑選任一位關主開始對決，戰術錦囊將優先推薦 14 種換框術！');
+  // ========================================================
+  // 第三關：專屬 NLP 對話實戰演練 (Dedicated NLP Dialogue Arena)
+  // 留存在專屬區內，以 NLP 換框術與維度轉換為評核標準，授權碼專屬暢行
+  // ========================================================
+  const LOCAL_BOSS_PRESETS = [
+    {
+      id: "boss_work_1",
+      name: "防禦刺蝟・研發小陳",
+      title: "心力交瘁的資深後端工程師",
+      avatar: "🦔",
+      categoryName: "職場協作",
+      scenario: "核心模組進度已延期四天未交，且未主動同步狀態，主管啟動一對一面談。",
+      surfaceHow: "進度延期不敢主動同步，認為說了也是被罵，乾脆被動防禦加班到半夜受罪。",
+      coreDesire: "渴望專業技術價值被尊重與看見，渴望工作負荷被客觀理解與獲得合理資源支援。",
+      openingStatement: "主管，要怎麼懲處您就直說吧，反正考核表在您手上。規格改了三次、測試環境又一直掛，把時程壓死，我真的沒什麼好辯解的。",
+      openingInnerThought: "（每次談話最後還不是興師問罪？隨便你們怎麼評吧，根本沒人管我死活。）",
+      recommendedPatterns: ["intent", "consequence", "redefine"]
+    },
+    {
+      id: "boss_work_2",
+      name: "焦慮旋風・產品林經理",
+      title: "跨部門專案經理",
+      avatar: "🌪️",
+      categoryName: "職場協作",
+      scenario: "大型跨部門專案上線前夕，經理高度焦慮，半夜連發訊息干預所有下屬執行細節。",
+      surfaceHow: "事必躬親盯緊每個細節，絕不敢放手給部屬，用高頻審查代替賦能授權。",
+      coreDesire: "渴望對成果品質的極致安心感，以及身為專案主責主管的強烈責任感與安全感。",
+      openingStatement: "我必須親自盯緊每個細節！要是放手給他們，專案出了大包最後還不是我要扛？我根本不敢閉上眼睛睡覺！",
+      openingInnerThought: "（大家都覺得我控制狂，但如果真的搞砸了，被老闆問責的只有我一個人，誰能替我分擔這種恐懼？）",
+      recommendedPatterns: ["intent", "outcome", "chunk_up"]
+    },
+    {
+      id: "boss_work_3",
+      name: "迷茫頑石・資深老張",
+      title: "15年核心業務骨幹",
+      avatar: "🪨",
+      categoryName: "職場協作",
+      scenario: "公司全面推動數位轉型與 AI 協作工具，老張拒絕參與培訓，認為花拳繡腿會毀掉公司口碑。",
+      surfaceHow: "固守傳統人脈與舊工作模式，消極抗拒所有新工具，將變革視為對老員工的清算。",
+      coreDesire: "渴望自己多年累積的經驗價值被肯定，渴望在時代急劇變革中保留安全感與尊嚴。",
+      openingStatement: "我們以前不用這些花俏的AI工具，公司還不是做到了業界前三？現在硬要搞這些，只是把流程弄得更複雜、更容易出錯而已！",
+      openingInnerThought: "（說什麼數位轉型，我看就是想把我們這批高薪老員工淘汰掉，但我這十幾年的心血算什麼？）",
+      recommendedPatterns: ["redefine", "counter_example", "criteria"]
+    },
+    {
+      id: "boss_work_4",
+      name: "玻璃心新人・小雨",
+      title: "應屆畢業行銷企劃",
+      avatar: "🌧️",
+      categoryName: "職場協作",
+      scenario: "主管在週會上指出了文案企劃中的數據引用錯誤，小雨認為主管公開否定了她的全部能力。",
+      surfaceHow: "將單一工作疏失與自我整個人生價值深度綁定，陷入自責自怨與退縮逃避。",
+      coreDesire: "渴望被團隊接納、獲得歸屬感與確定感，確認自己有能力成為有價值的專業人才。",
+      openingStatement: "主管，我是不是真的很沒用……連一份文案都寫不好，您改了那麼多，我覺得自己根本不適合這份工作，我只會給大家添麻煩。",
+      openingInnerThought: "（好丟臉，大家都在看我笑話，我讀了那麼多年書，怎麼連這點小事都做不好……）",
+      recommendedPatterns: ["chunk_down", "meta_frame", "intent"]
+    },
+    {
+      id: "boss_parenting_1",
+      name: "閉門刺蝟・高一兒子翔翔",
+      title: "沉迷手機的叛逆青少年",
+      avatar: "🎮",
+      categoryName: "親子教養",
+      scenario: "晚上十點房門緊閉，耳機音量開到最大打線上排位賽，對父母敲門叫他讀書極度煩躁。",
+      surfaceHow: "用沉迷手遊與大吼拒絕來應對父母的嘮叨，建立絕對的心理與物理隔離。",
+      coreDesire: "渴望個人界限與自主權被尊重，渴望在虛擬世界中獲得現實難以得到的成就感與掌控感。",
+      openingStatement: "煩不煩啊！你們進門不會敲門嗎？除了問成績和叫我放下手機，你們還會講什麼？我的事不用你們管！",
+      openingInnerThought: "（反正我在你們眼裡永遠不夠好，只有在遊戲裡我的隊友才真的需要我、認可我。）",
+      recommendedPatterns: ["intent", "world_view", "meta_frame"]
+    },
+    {
+      id: "boss_parenting_2",
+      name: "焦慮直升機・全職媽媽淑芬",
+      title: "名校升學焦慮症家長",
+      avatar: "🚁",
+      categoryName: "親子教養",
+      scenario: "國三女兒模擬考退步五名，淑芬連夜取消孩子所有的假日休閒，排滿衝刺補習班。",
+      surfaceHow: "嚴格控管孩子每分每秒的時間，用瘋狂補習來消解自己內心的升學焦慮。",
+      coreDesire: "渴望孩子未來擁有幸福穩固的生活，渴望自己全職奉獻的付出被證明是有價值的。",
+      openingStatement: "現在競爭這麼激烈，差一分就差一個志願！如果她現在不吃苦考上頂大，以後在社會上怎麼生存？我這一切還不都是為了她好！",
+      openingInnerThought: "（如果女兒考砸了，大家都會說是我這個全職媽媽沒帶好，我這十幾年的心血全完了……）",
+      recommendedPatterns: ["consequence", "outcome", "redefine"]
+    },
+    {
+      id: "boss_parenting_3",
+      name: "缺席提款機・台商父親志強",
+      title: "長期出差的補償型父親",
+      avatar: "💼",
+      categoryName: "親子教養",
+      scenario: "返家想跟讀高中的兒子親近，買了最新款旗艦手機送兒子，兒子卻收下禮物後轉身回房關門。",
+      surfaceHow: "用金錢物資來替代真實的陪伴與深層對話，將「給予物資」等同於「盡到了父親全部責任」。",
+      coreDesire: "渴望被孩子敬重、愛戴與親近，渴望彌補自己常年不在身邊的深深愧疚感。",
+      openingStatement: "我每天在外面拼死拼活賺錢，每個月給家裡匯幾十萬，他要什麼我都買給他，他到底還有什麼不滿意的？為什麼連一聲爸都不想叫我？",
+      openingInnerThought: "（我也想多陪他啊，但手停口就停，不賺錢這個家能過得這麼優渥嗎？他怎麼一點都不體諒我？）",
+      recommendedPatterns: ["intent", "redefine", "apply_to_self"]
+    },
+    {
+      id: "boss_parenting_4",
+      name: "完美主義少女・高三女兒小琳",
+      title: "大考重壓下的情緒崩潰學生",
+      avatar: "📚",
+      categoryName: "親子教養",
+      scenario: "模考全校第三名依然崩潰大哭，撕毀考卷，認為沒有拿到榜首就是徹底的恥辱。",
+      surfaceHow: "將考試成績與自我存在的價值畫上絕對等號，用極端的自我折磨來換取安全感。",
+      coreDesire: "渴望獲得無條件的愛與接納，渴望確定「即使我不完美、即使我偶爾失敗，我依然值得被愛」。",
+      openingStatement: "第三名有什麼用？第三名就意味著我還是個失敗者！要是我沒有考上第一志願醫學院，我的人生就全毀了，你們根本不懂！",
+      openingInnerThought: "（從小大家都誇我是第一名天才，如果我掉下來了，誰還會在乎我？爸爸媽媽還會愛我嗎？）",
+      recommendedPatterns: ["redefine", "criteria", "chunk_up"]
+    },
+    {
+      id: "boss_couple_1",
+      name: "冷戰冰川・疲憊妻子雅婷",
+      title: "喪偶式育兒的職業婦女",
+      avatar: "🧊",
+      categoryName: "伴侶親密",
+      scenario: "下班接小孩、做晚餐、盯作業到深夜，丈夫下班進門滑手機問『今晚吃什麼』，妻子徹底冷臉。",
+      surfaceHow: "用冷漠、嘆氣、拒絕交流與分房睡，來表達自己無法言說的疲憊與失望。",
+      coreDesire: "渴望在家庭繁重瑣事中被看見、被疼惜，渴望與伴侶擁有共同承擔的深層連結感。",
+      openingStatement: "隨便你怎麼想吧，反正這個家有沒有你都一樣。我已經不想再跟你吵了，吵了八百遍你也不會改，大家各過各的吧。",
+      openingInnerThought: "（我真的快累垮了，我不是想要你洗那兩個碗，我是想看到你真的在乎我、真的看見我快撐不下去了……）",
+      recommendedPatterns: ["intent", "redefine", "chunk_up"]
+    },
+    {
+      id: "boss_couple_2",
+      name: "逃避鴕鳥・沉默丈夫俊傑",
+      title: "下班躲在車庫的專案主管",
+      avatar: "🦤",
+      categoryName: "伴侶親密",
+      scenario: "開車到家後熄火坐在車裡滑半小時手機才上樓，一進家門只要妻子一開口抱怨就默默進書房關門。",
+      surfaceHow: "用沉默、拖延與物理迴避，逃離家庭中的情緒對立與指責。",
+      coreDesire: "渴望一處能徹底卸下壓力、沒有指責與要求的安全避風港，渴望被妻子肯定與欣賞。",
+      openingStatement: "一進門就問我這個做沒、那個弄沒……我在公司被老闆電了一整天，回自己家難道連安靜半小時的資格都沒有嗎？",
+      openingInnerThought: "（我做什麼在她眼裡都是錯的，既然怎麼做都會被罵，那我不如什麼都不要說、什麼都不要做。）",
+      recommendedPatterns: ["intent", "world_view", "outcome"]
+    },
+    {
+      id: "boss_couple_3",
+      name: "疑心偵探・安全感缺失女友芳芳",
+      title: "高敏感且患得患失的伴侶",
+      avatar: "🔍",
+      categoryName: "伴侶親密",
+      scenario: "男友晚上和同事聚餐半小時未看手機，芳芳連續撥打12通未接電話，並要求開啟視訊證明周圍沒有異性。",
+      surfaceHow: "用連環奪命連環call、翻看手機、查定位等高壓控管手段來索取安全感。",
+      coreDesire: "渴望在親密關係中感受到被牽掛、被堅定選擇與無可替代的深度連結感。",
+      openingStatement: "你剛才為什麼半個小時沒回我訊息？你是不是跟誰在一起？如果你真的在乎我，怎麼可能連花五秒鐘報備都做不到！你根本心裡沒有我！",
+      openingInnerThought: "（以前說愛我的人最後都拋棄我了，我好害怕一眨眼你也不要我了，我快被這種恐慌逼瘋了……）",
+      recommendedPatterns: ["intent", "counter_example", "meta_frame"]
+    },
+    {
+      id: "boss_couple_4",
+      name: "大男人強權・事業型男友阿豪",
+      title: "控制型高管伴侶",
+      avatar: "🦁",
+      categoryName: "伴侶親密",
+      scenario: "要求女友辭去目前感興趣的文創工作，必須到自己朋友的科技公司上班，並批評女友沒有大局觀。",
+      surfaceHow: "用經濟強勢與霸道安排來主導伴侶的一切決定，不容許對方的獨立意志。",
+      coreDesire: "渴望對未來的掌控感，用『保護與規劃』來包裝自己對親密關係不可控的深層恐懼。",
+      openingStatement: "我幫你安排好去我朋友公司上班有什麼不好？你那點薪水連房租都不夠，我做這一切都是為了我們的未來好，你為什麼總要跟我唱反調？",
+      openingInnerThought: "（她如果越走越遠、認識更多外面的圈子，會不會哪天就覺得我配不上她了？我必須讓她留在我的安全範圍內。）",
+      recommendedPatterns: ["intent", "redefine", "apply_to_self"]
+    },
+    {
+      id: "boss_personal_1",
+      name: "絕望冒牌者・創業青年家豪",
+      title: "陷入冒牌者症候群的科技創辦人",
+      avatar: "🎭",
+      categoryName: "個人突破",
+      scenario: "剛拿下千萬元天使輪融資，下週即將向百位投資人與媒體進行產品發表會，家豪卻整夜失眠、極度恐慌。",
+      surfaceHow: "將所有的成功歸因於僥倖與運氣，整天緊繃戒備，害怕自己隨時被拆穿是個騙子。",
+      coreDesire: "渴望打從心底接納自己的真實價值，渴望擺脫『必須時刻完美無瑕才配被認可』的窒息重壓。",
+      openingStatement: "投資人看錯我了……現在的成績純粹只是走運，我根本沒有能力帶領三十人的團隊。下個月的發布會我一定會徹底搞砸，大家很快就會發現我只是個冒牌貨！",
+      openingInnerThought: "（如果大家知道我私底下有多脆弱多無能，一定會徹底唾棄我，我好想現在就找個地洞鑽進去……）",
+      recommendedPatterns: ["chunk_down", "counter_example", "criteria"]
+    },
+    {
+      id: "boss_personal_2",
+      name: "空巢迷航・全職主婦慧琳",
+      title: "孩子離家後失去生活重心的母親",
+      avatar: "🕊️",
+      categoryName: "個人突破",
+      scenario: "小兒子去外地讀大學後，慧琳每天坐在客廳對著空房間發呆流淚，覺得人生後半場已經毫無意義。",
+      surfaceHow: "依然試圖透過每日高頻電話過度干預成年孩子的生活，將母職作為唯一的自我價值寄託。",
+      coreDesire: "渴望被需要與被珍視，渴望重新找回除了『母親』角色之外的獨立生命意義與自信。",
+      openingStatement: "孩子走了，家裡空蕩蕩的……我這二十幾年把所有青春都奉獻給這個家，現在他們不需要我了，我活著還有什麼價值？我什麼都不會了。",
+      openingInnerThought: "（鏡子裡的我老了、落伍了，孩子在看更廣闊的世界，而我已經成了被時代拋棄的多餘人……）",
+      recommendedPatterns: ["redefine", "outcome", "chunk_up"]
+    },
+    {
+      id: "boss_personal_3",
+      name: "困頓中年中階主管・志偉",
+      title: "面臨中年失業危機的45歲經理",
+      avatar: "🧗‍♂️",
+      categoryName: "個人突破",
+      scenario: "因外企裁員縮編失去工作，投了上百份高管履歷毫無音訊，面對房貸與孩子學費陷入極度自怨自艾。",
+      surfaceHow: "死守過去的頭銜與固定薪資架構，認為年過四十沒人要就是人生已經死局。",
+      coreDesire: "渴望重新確認自我的核心競爭力與社會價值，渴望在家庭中維持尊嚴與頂樑柱的支撐感。",
+      openingStatement: "到了這個年紀被裁員，誰還要我？年輕人便宜又能熬夜加班，我除了這十幾年做的事什麼都不會，我這輩子真的完了，我沒臉面對老婆孩子。",
+      openingInnerThought: "（以前走在公司大家都點頭哈腰，現在坐在人力銀行前我就是個過剩人口，我怎麼會把一手好牌打成這樣……）",
+      recommendedPatterns: ["redefine", "counter_example", "model_world"]
+    },
+    {
+      id: "boss_personal_4",
+      name: "退休失落・老廠長老劉",
+      title: "失去權力光環的退休長者",
+      avatar: "👴",
+      categoryName: "個人突破",
+      scenario: "退休後每天在家巡視挑剔，對兒女的家事安排、孫子的教育指手畫腳，引發全家人敬而遠之。",
+      surfaceHow: "用挑毛病、立規矩、重提當年勇來強行刷存在感，試圖維持過去號令全場的權威做法。",
+      coreDesire: "渴望依然被家人敬重與重視，渴望在生命晚期依然保持對周遭生活的影響力與被需要的存在感。",
+      openingStatement: "現在年輕人根本不懂規矩！我當年管幾千人的大廠，所有人見到我都客客氣氣的，現在在自己家裡，連叫你們吃個飯都沒人聽我的，你們就是嫌我老了沒用了！",
+      openingInnerThought: "（人走茶涼啊，走出那扇大門我就什麼都不是了，現在連自己的兒女都拿我當空氣，我真的老得一文不值了嗎？）",
+      recommendedPatterns: ["intent", "redefine", "criteria"]
+    }
+  ];
+
+  function getLocalBossPreset(bossId) {
+    return LOCAL_BOSS_PRESETS.find(b => b.id === bossId) || LOCAL_BOSS_PRESETS[0];
+  }
+
+  // 開啟第三關：專屬 NLP 對話實戰關
+  function startNlpDialogue(bossId = 'boss_work_1', difficulty = 'normal') {
+    if (!checkSubscription()) return;
+    state.activeMode = 'dialogue';
+    state.dialogueBossId = bossId;
+    state.dialogueDifficulty = difficulty;
+    state.dialogueHistory = [];
+    state.dialogueTurnIndex = 1;
+
+    const boss = getLocalBossPreset(bossId);
+    state.currentDialogueBoss = boss;
+
+    const maxHp = difficulty === 'normal' ? 60 : (difficulty === 'hard' ? 80 : 100);
+    state.dialogueMaxHp = maxHp;
+    state.dialogueCurrentHp = maxHp;
+
+    // 更新介面基本資訊
+    if (dom.nlpDlgBossSelect) dom.nlpDlgBossSelect.value = bossId;
+    if (dom.nlpDlgDiffSelect) dom.nlpDlgDiffSelect.value = difficulty;
+    if (dom.dlgBossAvatar) dom.dlgBossAvatar.textContent = boss.avatar;
+    if (dom.dlgBossName) dom.dlgBossName.textContent = boss.name;
+    if (dom.dlgBossTitle) dom.dlgBossTitle.textContent = boss.title;
+    if (dom.dlgBossScenario) dom.dlgBossScenario.textContent = boss.scenario;
+    if (dom.dlgStuckHow) dom.dlgStuckHow.textContent = boss.surfaceHow;
+    if (dom.dlgCoreDesire) dom.dlgCoreDesire.textContent = boss.coreDesire;
+
+    updateDlgHpBar(maxHp, maxHp);
+
+    // 切換至對話實戰畫面
+    dom.screenHub?.classList.add('hidden');
+    dom.screenListen?.classList.add('hidden');
+    dom.screenResponse?.classList.add('hidden');
+    dom.screenReport?.classList.add('hidden');
+    dom.screenDialogue?.classList.remove('hidden');
+
+    // 渲染開場白
+    renderDialogueOpening(boss);
+
+    // 渲染開場換框錦囊建議
+    renderDlgTacticsList(boss.recommendedPatterns || ['intent', 'redefine', 'consequence']);
+  }
+
+  function updateDlgHpBar(current, max) {
+    if (dom.dlgHpText) dom.dlgHpText.textContent = `${Math.max(0, current)} / ${max} HP`;
+    if (dom.dlgHpBar) {
+      const pct = Math.max(0, Math.min(100, Math.round((current / max) * 100)));
+      dom.dlgHpBar.style.width = `${pct}%`;
+      if (pct <= 25) {
+        dom.dlgHpBar.style.background = 'linear-gradient(90deg, #10b981, #34d399)';
+      } else if (pct <= 60) {
+        dom.dlgHpBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+      } else {
+        dom.dlgHpBar.style.background = 'linear-gradient(90deg, #ef4444, #f59e0b)';
+      }
+    }
+  }
+
+  function renderDialogueOpening(boss) {
+    if (!dom.dlgChatBox) return;
+    dom.dlgChatBox.innerHTML = '';
+
+    state.dialogueHistory = [
+      {
+        role: 'assistant',
+        speaker: boss.name,
+        content: boss.openingStatement,
+        innerThought: boss.openingInnerThought
+      }
+    ];
+
+    appendBossMessage(boss.name, boss.avatar, boss.openingStatement, boss.openingInnerThought, '眼神迴避，防衛緊繃');
+  }
+
+  function appendBossMessage(name, avatar, statement, innerThought, mood) {
+    if (!dom.dlgChatBox) return;
+    const row = document.createElement('div');
+    row.className = 'nlp-msg-row boss-row';
+    row.innerHTML = `
+      <div class="nlp-msg-avatar">${avatar}</div>
+      <div class="nlp-msg-body">
+        <div style="font-size:0.78rem; font-weight:700; color:#64748b;">${escapeHtml(name)}</div>
+        <div class="nlp-bubble nlp-bubble-boss">
+          ${mood ? `<div class="nlp-bubble-mood">【神態】${escapeHtml(mood)}</div>` : ''}
+          ${innerThought ? `<div class="nlp-bubble-inner-thought">💭 內心OS：${escapeHtml(innerThought)}</div>` : ''}
+          <div>${escapeHtml(statement)}</div>
+        </div>
+      </div>
+    `;
+    dom.dlgChatBox.appendChild(row);
+    dom.dlgChatBox.scrollTop = dom.dlgChatBox.scrollHeight;
+  }
+
+  function appendCoachMessage(statement) {
+    if (!dom.dlgChatBox) return;
+    const row = document.createElement('div');
+    row.className = 'nlp-msg-row coach-row';
+    row.innerHTML = `
+      <div class="nlp-msg-avatar">🧙‍♂️</div>
+      <div class="nlp-msg-body" style="align-items: flex-end;">
+        <div style="font-size:0.78rem; font-weight:700; color:#64748b;">我（學員教練）</div>
+        <div class="nlp-bubble nlp-bubble-coach">
+          ${escapeHtml(statement)}
+        </div>
+      </div>
+    `;
+    dom.dlgChatBox.appendChild(row);
+    dom.dlgChatBox.scrollTop = dom.dlgChatBox.scrollHeight;
+  }
+
+  function appendTurnFeedback(turnResult) {
+    if (!dom.dlgChatBox) return;
+    const card = document.createElement('div');
+    card.className = 'nlp-turn-feedback-card';
+    const pattern = turnResult.identifiedPattern || {};
+    const feedback = turnResult.coachFeedback || {};
+
+    card.innerHTML = `
+      <div class="nlp-feedback-top">
+        <span class="nlp-pattern-pill">🎯 識別換框：${escapeHtml(pattern.name || '意圖探尋')}</span>
+        <span class="nlp-hp-deduction-badge">⚡ 心防 -${turnResult.hpDeduction || 20} HP (評分: ${turnResult.turnScore || 85}分)</span>
+      </div>
+      <div class="nlp-coach-advice-text">
+        <div><b>💡 亮點：</b>${escapeHtml(feedback.strength || '準確體會到對方的正面意圖，有效鬆動抗拒。')}</div>
+        ${feedback.nextStepAdvice ? `<div style="margin-top:0.25rem; color:#4338ca;"><b>🧭 下步引導：</b>${escapeHtml(feedback.nextStepAdvice)}</div>` : ''}
+      </div>
+    `;
+    dom.dlgChatBox.appendChild(card);
+    dom.dlgChatBox.scrollTop = dom.dlgChatBox.scrollHeight;
+  }
+
+  function toggleDlgTacticsDrawer() {
+    if (!dom.dlgTacticsBox) return;
+    const isHidden = dom.dlgTacticsBox.style.display === 'none';
+    dom.dlgTacticsBox.style.display = isHidden ? 'block' : 'none';
+  }
+
+  function renderDlgTacticsList(suggestedPatterns) {
+    if (!dom.dlgTacticsList) return;
+    dom.dlgTacticsList.innerHTML = '';
+
+    const list = Array.isArray(suggestedPatterns) ? suggestedPatterns : ['intent', 'redefine', 'consequence'];
+    list.forEach(item => {
+      const pId = typeof item === 'string' ? item : (item.id || item.patternId || 'intent');
+      const pObj = state.patterns.find(p => p.id === pId) || { nameZh: item.name || '正面意圖', icon: '🪄', formula: '肯定其正面初衷' };
+      const hint = typeof item === 'object' && item.hint ? item.hint : pObj.summary;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'nlp-tactics-tag';
+      btn.innerHTML = `<span>${pObj.icon}</span> <span>${pObj.nameZh}</span>`;
+      btn.title = `${pObj.summary}\n示範句型：${pObj.formula}`;
+      btn.addEventListener('click', () => {
+        if (dom.inputDlg) {
+          dom.inputDlg.value = pObj.formula;
+          dom.inputDlg.focus();
+        }
+      });
+      dom.dlgTacticsList.appendChild(btn);
+    });
+  }
+
+  // 發送教練對話回應
+  async function handleNlpDialogueSend() {
+    const text = (dom.inputDlg?.value || '').trim();
+    if (!text) {
+      alert('請先輸入你想對關主說的教練話語！');
+      dom.inputDlg?.focus();
+      return;
+    }
+
+    if (dom.btnDlgSend) {
+      dom.btnDlgSend.disabled = true;
+      dom.btnDlgSend.textContent = '關主體會中...';
+    }
+
+    appendCoachMessage(text);
+    if (dom.inputDlg) dom.inputDlg.value = '';
+
+    state.dialogueHistory.push({
+      role: 'user',
+      content: text
+    });
+
+    try {
+      const res = await fetch('/api/nlp/dialogue/turn', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-subscription-code': getSubCode()
+        },
+        body: JSON.stringify({
+          bossId: state.dialogueBossId,
+          difficulty: state.dialogueDifficulty,
+          dialogueHistory: state.dialogueHistory,
+          userMessage: text,
+          subCode: getSubCode()
+        })
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        if (data.error === 'SUBSCRIPTION_REQUIRED') {
+          if (typeof window.showSubscriptionModal === 'function') {
+            window.showSubscriptionModal(data.message || '請先啟用有效訂閱授權碼');
+          } else {
+            alert(data.message);
+          }
+          return;
+        }
+        alert('發送失敗：' + (data.error || '請稍後重試'));
+        return;
+      }
+
+      const turn = data.turnResult || {};
+      
+      // 更新心防
+      state.dialogueCurrentHp = Math.max(0, state.dialogueCurrentHp - (Number(turn.hpDeduction) || 20));
+      updateDlgHpBar(state.dialogueCurrentHp, state.dialogueMaxHp);
+
+      // 回報評估
+      appendTurnFeedback(turn);
+
+      // 檢查心防是否徹底瓦解
+      if (state.dialogueCurrentHp === 0) {
+        const victoryRow = document.createElement('div');
+        victoryRow.style.margin = '1rem 0';
+        victoryRow.style.padding = '1rem';
+        victoryRow.style.background = 'linear-gradient(135deg, #ecfdf5, #d1fae5)';
+        victoryRow.style.border = '2px solid #10b981';
+        victoryRow.style.borderRadius = '12px';
+        victoryRow.style.textAlign = 'center';
+        victoryRow.innerHTML = `
+          <div style="font-size:1.8rem; margin-bottom:0.25rem;">🎉 破框大成功！關主心防已徹底瓦解！</div>
+          <div style="font-size:0.9rem; color:#065f46; margin-bottom:0.75rem;">你成功運用 NLP 語言回應術將對方的執念轉換為無限可能性，成功將關主收攏入百寶箱！</div>
+          <button class="btn btn-primary" id="btnNlpDlgAutoFinish" style="background:#059669; font-weight:800; padding:0.6rem 1.4rem;">
+            🏆 立即查看本場實戰復盤報告 ➔
+          </button>
+        `;
+        dom.dlgChatBox?.appendChild(victoryRow);
+        dom.dlgChatBox?.scrollTo({ top: dom.dlgChatBox.scrollHeight, behavior: 'smooth' });
+
+        document.getElementById('btnNlpDlgAutoFinish')?.addEventListener('click', finishDialogueAndGenerateReport);
+      } else {
+        // 關主下前回應
+        const boss = state.currentDialogueBoss || getLocalBossPreset(state.dialogueBossId);
+        appendBossMessage(boss.name, boss.avatar, turn.bossReply, turn.innerThought, turn.mood);
+
+        state.dialogueHistory.push({
+          role: 'assistant',
+          speaker: boss.name,
+          content: turn.bossReply,
+          innerThought: turn.innerThought
+        });
+
+        // 更新錦囊推薦
+        if (Array.isArray(turn.suggestedNextPatterns) && turn.suggestedNextPatterns.length > 0) {
+          renderDlgTacticsList(turn.suggestedNextPatterns);
+          if (dom.dlgTacticsBox) dom.dlgTacticsBox.style.display = 'block';
+        }
+      }
+    } catch (err) {
+      console.error('對話發送異常:', err);
+      alert('網路連線異常，請稍後重試。');
+    } finally {
+      if (dom.btnDlgSend) {
+        dom.btnDlgSend.disabled = false;
+        dom.btnDlgSend.textContent = '🚀 發送回應';
+      }
+      dom.inputDlg?.focus();
+    }
+  }
+
+  // 結算對話實戰關報告
+  async function finishDialogueAndGenerateReport() {
+    if (!checkSubscription()) return;
+    if (dom.btnDlgFinish) {
+      dom.btnDlgFinish.disabled = true;
+      dom.btnDlgFinish.textContent = '正在生成復盤報告...';
+    }
+
+    try {
+      const res = await fetch('/api/nlp/dialogue/report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-subscription-code': getSubCode()
+        },
+        body: JSON.stringify({
+          bossId: state.dialogueBossId,
+          difficulty: state.dialogueDifficulty,
+          dialogueHistory: state.dialogueHistory,
+          studentName: getStudentName(),
+          subCode: getSubCode()
+        })
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        if (data.error === 'SUBSCRIPTION_REQUIRED') {
+          if (typeof window.showSubscriptionModal === 'function') {
+            window.showSubscriptionModal(data.message || '請先啟用有效訂閱授權碼');
+          } else {
+            alert(data.message);
+          }
+          return;
+        }
+        alert('生成報告失敗：' + (data.error || '請重試'));
+        return;
+      }
+
+      state.currentReport = data.report;
+      renderMasteryReport(data.report);
+
+      // 同步本地百寶箱練習紀錄
+      if (typeof InventoryManager !== 'undefined' && typeof InventoryManager.recordBattleResult === 'function') {
+        const boss = state.currentDialogueBoss || getLocalBossPreset(state.dialogueBossId);
+        const evalData = {
+          score: data.report.overallScore,
+          winningReason: `【NLP對話實戰】榮獲『${data.report.masteryTitle}』稱號（與 ${boss.name} 對決）`,
+          advice: data.report.summaryCritique,
+          dimensions: data.report.radarDimensions
+        };
+        InventoryManager.recordBattleResult(boss, evalData, state.dialogueHistory);
+      }
+
+      // 切換至報告畫面
+      dom.screenDialogue?.classList.add('hidden');
+      dom.screenReport?.classList.remove('hidden');
+      dom.screenReport?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      console.error('對話結算報告失敗:', e);
+      alert('產生結算報告時發生錯誤，請重試。');
+    } finally {
+      if (dom.btnDlgFinish) {
+        dom.btnDlgFinish.disabled = false;
+        dom.btnDlgFinish.textContent = '🏁 結算對話報告';
       }
     }
   }

@@ -3534,6 +3534,161 @@ body {
   line-height: 1.4;
 }
 
+/* ========================================================
+   NLP 第三關：專屬對話實戰關樣式 (NLP Dialogue Arena)
+   ======================================================== */
+.nlp-msg-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  width: 100%;
+}
+
+.nlp-msg-row.boss-row {
+  align-items: flex-start;
+}
+
+.nlp-msg-row.coach-row {
+  flex-direction: row-reverse;
+  align-items: flex-start;
+}
+
+.nlp-msg-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
+.nlp-msg-row.boss-row .nlp-msg-avatar {
+  background: #fdf4ff;
+  border: 1.5px solid #f0abfc;
+}
+
+.nlp-msg-row.coach-row .nlp-msg-avatar {
+  background: #eff6ff;
+  border: 1.5px solid #93c5fd;
+}
+
+.nlp-msg-body {
+  max-width: 82%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nlp-bubble {
+  padding: 0.85rem 1.1rem;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  position: relative;
+  word-break: break-word;
+}
+
+.nlp-bubble-boss {
+  background: #ffffff;
+  color: #1e293b;
+  border: 1.5px solid #e2e8f0;
+  border-top-left-radius: 4px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.nlp-bubble-inner-thought {
+  font-size: 0.8rem;
+  color: #7c3aed;
+  font-style: italic;
+  background: #faf5ff;
+  border-left: 3px solid #c084fc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 0.4rem;
+}
+
+.nlp-bubble-mood {
+  font-size: 0.76rem;
+  color: #64748b;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+}
+
+.nlp-bubble-coach {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  color: #ffffff;
+  border-top-right-radius: 4px;
+  box-shadow: 0 3px 10px rgba(99, 102, 241, 0.2);
+}
+
+.nlp-turn-feedback-card {
+  background: #ffffff;
+  border: 1.5px solid #e9d5ff;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.35rem;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.08);
+}
+
+.nlp-feedback-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.nlp-pattern-pill {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #6d28d9;
+  background: #f3e8ff;
+  border: 1px solid #d8b4fe;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+.nlp-hp-deduction-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #b91c1c;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+
+.nlp-coach-advice-text {
+  font-size: 0.8rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.nlp-tactics-tag {
+  background: #faf5ff;
+  border: 1px solid #d8b4fe;
+  color: #6d28d9;
+  font-size: 0.78rem;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nlp-tactics-tag:hover {
+  background: #ede9fe;
+  border-color: #a855f7;
+  transform: translateY(-1px);
+}
+
+
 
 
 
