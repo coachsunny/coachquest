@@ -1200,7 +1200,8 @@ body {
  animation: fadeIn 0.15s ease-out;
 }
 
-.modal-dialog {
+.modal-dialog,
+.modal-container {
  background: #ffffff;
  border-radius: var(--radius-md);
  max-width: 540px;
@@ -1211,8 +1212,12 @@ body {
  flex-direction: column;
  max-height: 90vh;
 }
-.modal-dialog.modal-large {
- max-width: 720px;
+.modal-dialog.modal-large,
+.modal-container.modal-lg {
+ max-width: 960px;
+}
+.modal-container.modal-xl {
+ max-width: 1100px;
 }
 
 .modal-header {
@@ -1221,6 +1226,7 @@ body {
  justify-content: space-between;
  padding: 1rem 1.25rem;
  border-bottom: 1px solid var(--border-color);
+ background: #ffffff;
 }
 .modal-header h3 {
  font-size: 1.15rem;
@@ -3721,6 +3727,66 @@ body {
   background: #ede9fe;
   border-color: #a855f7;
   transform: translateY(-1px);
+}
+
+/* ========================================================
+   NLP 14 式換框速查圖鑑彈窗專屬樣式 (高對比度純白頂欄)
+   ======================================================== */
+#modalNlpPatterns {
+  z-index: 1050 !important;
+}
+
+#modalNlpPatterns .modal-container {
+  background: #ffffff !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.45) !important;
+  max-width: 980px !important;
+  width: 95% !important;
+}
+
+#modalNlpPatterns .modal-header {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%) !important;
+  color: #ffffff !important;
+  padding: 1.15rem 1.5rem !important;
+  border-bottom: 2px solid #6366f1 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+#modalNlpPatterns .modal-header .modal-title,
+#modalNlpPatterns .modal-header h3 {
+  color: #ffffff !important;
+  font-size: 1.2rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.5px !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+#modalNlpPatterns .modal-header .btn-close {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.45) !important;
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 50% !important;
+  font-size: 1.15rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+#modalNlpPatterns .modal-header .btn-close:hover {
+  background: rgba(255, 255, 255, 0.38) !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
+  transform: rotate(90deg) !important;
 }
 
 
