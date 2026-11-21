@@ -101,19 +101,124 @@ function recordVerifySuccess(clientIp) {
   if (clientIp) verifyRateLimits.delete(clientIp);
 }
 
-function verifyAdminSession(request, env) {
+function base64UrlEncode(str) {
+  return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlDecode(str) {
+  let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  return decodeURIComponent(escape(atob(b64)));
+}
+
+function arrayBufferToBase64Url(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToArrayBuffer(str) {
+  let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (b64.length % 4) b64 += '=';
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function createSignedAdminToken(username, secret) {
+  try {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const payload = {
+      u: username,
+      exp: Date.now() + 7 * 24 * 3600 * 1000,
+      rnd: Math.random().toString(36).substring(2, 8)
+    };
+    const payloadStr = base64UrlEncode(JSON.stringify(payload));
+    const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(payloadStr));
+    const sigStr = arrayBufferToBase64Url(sigBuf);
+    return `cq_adm_${payloadStr}.${sigStr}`;
+  } catch (err) {
+    return 'cq_adm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 12);
+  }
+}
+
+async function verifySignedAdminToken(token, env) {
+  if (!token || !token.startsWith('cq_adm_')) return null;
+  const raw = token.substring(7);
+  const parts = raw.split('.');
+  if (parts.length !== 2) return null;
+  const [payloadStr, sigStr] = parts;
+
+  try {
+    const creds = getAdminCredentials(env);
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(creds.password),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+    const sigBytes = base64UrlToArrayBuffer(sigStr);
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(payloadStr));
+    if (!valid) return null;
+
+    const payload = JSON.parse(base64UrlDecode(payloadStr));
+    if (!payload || !payload.exp || Date.now() > payload.exp) return null;
+
+    return {
+      username: payload.u || creds.username,
+      expiresAt: payload.exp
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function verifyAdminSession(request, env) {
   const authHeader = request.headers.get('Authorization') || request.headers.get('x-admin-token') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
 
+  // 1. 記憶體快取
   const session = adminSessions.get(token);
   if (session && session.expiresAt > Date.now()) {
     return session;
   }
 
-  // 支援環境變數 ADMIN_SECRET 作為萬用管理金鑰
-  if (env && env.ADMIN_SECRET && token === String(env.ADMIN_SECRET).trim()) {
-    return { username: 'admin', token };
+  // 2. 支援環境變數 ADMIN_SECRET 或密碼直接作為金鑰
+  const creds = getAdminCredentials(env);
+  if ((env && env.ADMIN_SECRET && token === String(env.ADMIN_SECRET).trim()) || (creds.password && token === creds.password)) {
+    return { username: creds.username, token, expiresAt: Date.now() + 86400000 };
+  }
+
+  // 3. 查 Cloudflare KV 持久化 Session
+  if (env && env.COACHQUEST_KV) {
+    try {
+      const kvSession = await env.COACHQUEST_KV.get('admin_session:' + token, { type: 'json' });
+      if (kvSession && kvSession.expiresAt > Date.now()) {
+        adminSessions.set(token, kvSession);
+        return kvSession;
+      }
+    } catch (e) {
+      console.warn('從 KV 讀取 admin session 失敗:', e);
+    }
+  }
+
+  // 4. HMAC 簽名驗證（跨 Worker 節點、部署重啟無縫通行）
+  const hmacSession = await verifySignedAdminToken(token, env);
+  if (hmacSession) {
+    adminSessions.set(token, hmacSession);
+    return hmacSession;
   }
 
   return null;
@@ -210,7 +315,7 @@ async function saveStoredSubscriptionCodes(env, codes) {
 
 async function verifySubscriptionCode(code, env, request = null, requiredScope = null) {
   // 若帶有合法管理員 token，直接開通管理員測試通行（全權限）
-  if (request && verifyAdminSession(request, env)) {
+  if (request && await verifyAdminSession(request, env)) {
     return {
       valid: true,
       code: 'ADMIN-PASS',
@@ -2069,12 +2174,21 @@ export async function handleApiRequest(request, env) {
       const creds = getAdminCredentials(env);
 
       if (inputUser === creds.username && inputPass === creds.password) {
-        const token = 'cq_adm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 12);
-        adminSessions.set(token, {
+        const token = await createSignedAdminToken(creds.username, creds.password);
+        const session = {
           username: creds.username,
           createdAt: Date.now(),
           expiresAt: Date.now() + 7 * 24 * 3600 * 1000 // 7 天有效
-        });
+        };
+        adminSessions.set(token, session);
+
+        if (env && env.COACHQUEST_KV) {
+          try {
+            await env.COACHQUEST_KV.put('admin_session:' + token, JSON.stringify(session), { expirationTtl: 7 * 24 * 3600 });
+          } catch (e) {
+            console.warn('儲存 admin session 至 KV 失敗:', e);
+          }
+        }
 
         return new Response(JSON.stringify({
           ok: true,
@@ -2091,7 +2205,7 @@ export async function handleApiRequest(request, env) {
 
     // 15. GET /api/admin/verify (檢查 Session 有效性)
     if (pathname === '/admin/verify' && request.method === 'GET') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權或登入已過期' }), {
           status: 401,
@@ -2103,7 +2217,7 @@ export async function handleApiRequest(request, env) {
 
     // 16. GET /api/admin/practice-logs (管理員調閱所有學員對話紀錄)
     if (pathname === '/admin/practice-logs' && request.method === 'GET') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
           status: 401,
@@ -2185,7 +2299,7 @@ export async function handleApiRequest(request, env) {
 
     // 17. GET /api/admin/practice-logs/detail (調閱單筆完整對話與逐字稿)
     if (pathname === '/admin/practice-logs/detail' && request.method === 'GET') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
           status: 401,
@@ -2209,7 +2323,7 @@ export async function handleApiRequest(request, env) {
 
     // 18. POST /api/admin/practice-logs/delete (管理員刪除單筆紀錄)
     if (pathname === '/admin/practice-logs/delete' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
           status: 401,
@@ -2228,7 +2342,7 @@ export async function handleApiRequest(request, env) {
 
     // 19. POST /api/admin/practice-logs/clear (管理員清空所有紀錄)
     if (pathname === '/admin/practice-logs/clear' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), {
           status: 401,
@@ -2242,7 +2356,7 @@ export async function handleApiRequest(request, env) {
 
     // 19B. POST /api/admin/practice-logs/prune-live (管理員一鍵清理重複與過期進行中暫存)
     if (pathname === '/admin/practice-logs/prune-live' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
       }
@@ -2271,7 +2385,7 @@ export async function handleApiRequest(request, env) {
 
     // 20. POST /api/admin/import-save (導師後台直接匯入學員的 JSON 存檔檔案)
     if (pathname === '/admin/import-save' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
       }
@@ -2347,7 +2461,7 @@ export async function handleApiRequest(request, env) {
 
     // 21. GET /api/admin/subscriptions (管理員取得所有訂閱碼與統計)
     if (pathname === '/admin/subscriptions' && request.method === 'GET') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
       }
@@ -2421,7 +2535,7 @@ export async function handleApiRequest(request, env) {
 
     // 22. POST /api/admin/subscriptions/create (管理員新增或生成訂閱碼)
     if (pathname === '/admin/subscriptions/create' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
       }
@@ -2477,7 +2591,7 @@ export async function handleApiRequest(request, env) {
 
     // 23. POST /api/admin/subscriptions/update (管理員更新/延長訂閱碼)
     if (pathname === '/admin/subscriptions/update' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
       }
@@ -2523,7 +2637,7 @@ export async function handleApiRequest(request, env) {
 
     // 24. POST /api/admin/subscriptions/delete (管理員刪除訂閱碼)
     if (pathname === '/admin/subscriptions/delete' && request.method === 'POST') {
-      const session = verifyAdminSession(request, env);
+      const session = await verifyAdminSession(request, env);
       if (!session) {
         return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
       }

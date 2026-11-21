@@ -1308,6 +1308,12 @@ async function handleCreateSubscription() {
       },
       body: JSON.stringify({ code, name, scope, type, days })
     });
+    if (res.status === 401) {
+      alert('🔒 管理員登入已逾時或授權失效，請重新登入管理員帳號！');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showLoginView();
+      return;
+    }
     const data = await res.json();
     if (data.ok) {
       alert(`🎉 ${data.message}`);
@@ -1368,6 +1374,12 @@ async function applyQuickExtend(days, isPerm) {
       },
       body: JSON.stringify(payload)
     });
+    if (res.status === 401) {
+      alert('🔒 管理員登入已逾時或授權失效，請重新登入管理員帳號！');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showLoginView();
+      return;
+    }
     const data = await res.json();
     if (data.ok) {
       alert(`🎉 ${isPerm ? '已成功將該訂閱碼調整為【永久有效】！' : `已成功為該訂閱碼延長 ${days} 天效期！`}`);
@@ -1399,6 +1411,12 @@ async function handleEditSubscription() {
       },
       body: JSON.stringify({ code: editingSubscription.code, name, status, scope })
     });
+    if (res.status === 401) {
+      alert('🔒 管理員登入已逾時或授權失效，請重新登入管理員帳號！');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showLoginView();
+      return;
+    }
     const data = await res.json();
     if (data.ok) {
       alert('🎉 訂閱設定已成功儲存！');
@@ -1425,6 +1443,12 @@ async function updateSubscriptionStatus(code, status) {
       },
       body: JSON.stringify({ code, status })
     });
+    if (res.status === 401) {
+      alert('🔒 管理員登入已逾時或授權失效，請重新登入管理員帳號！');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showLoginView();
+      return;
+    }
     const data = await res.json();
     if (data.ok) {
       await loadSubscriptions();
@@ -1449,6 +1473,12 @@ async function deleteSubscriptionCode(code) {
       },
       body: JSON.stringify({ code })
     });
+    if (res.status === 401) {
+      alert('🔒 管理員登入已逾時或授權失效，請重新登入管理員帳號！');
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showLoginView();
+      return;
+    }
     const data = await res.json();
     if (data.ok) {
       await loadSubscriptions();
