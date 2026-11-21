@@ -669,9 +669,16 @@
       <!-- 工具列 -->
       <div class="toolbar-card">
         <div class="filter-group">
-          <input type="text" id="filterSubSearch" class="form-control" placeholder="🔍 搜尋授權碼 / 學員姓名..." style="width: 260px; font-size: 0.85rem;">
+          <input type="text" id="filterSubSearch" class="form-control" placeholder="🔍 搜尋授權碼 / 學員姓名..." style="width: 240px; font-size: 0.85rem;">
           
-          <select id="filterSubStatus" class="form-control" style="width: 170px; font-size: 0.85rem;">
+          <select id="filterSubScope" class="form-control" style="width: 155px; font-size: 0.85rem;">
+            <option value="all_scope">全部授權範圍</option>
+            <option value="all">🌟 全部 (一般+專屬)</option>
+            <option value="general">🛡️ 一般 (四大道館)</option>
+            <option value="exclusive">🪄 專屬 (NLP回應術)</option>
+          </select>
+
+          <select id="filterSubStatus" class="form-control" style="width: 160px; font-size: 0.85rem;">
             <option value="all">全部授權狀態</option>
             <option value="active">🟢 生效中 (含永久)</option>
             <option value="permanent">👑 永久 VIP 授權</option>
@@ -699,6 +706,7 @@
               <tr>
                 <th>訂閱授權碼</th>
                 <th>學員名稱 / 備註</th>
+                <th>授權範圍</th>
                 <th>授權方案</th>
                 <th>到期時間 / 剩餘天數</th>
                 <th>狀態</th>
@@ -742,6 +750,16 @@
           <div class="form-group">
             <label for="inputCreateSubName">學員名稱 / 備註資訊</label>
             <input type="text" id="inputCreateSubName" class="form-control" placeholder="例如：張小明 / 2026 秋季教練家教班" required>
+          </div>
+
+          <div class="form-group">
+            <label for="selectCreateSubScope">授權適用範圍</label>
+            <select id="selectCreateSubScope" class="form-control">
+              <option value="all" selected>🌟 全部權限 (一般四大道館 + NLP專屬區)</option>
+              <option value="general">🛡️ 一般權限 (僅四大道館與常規功能)</option>
+              <option value="exclusive">🪄 專屬權限 (僅NLP語言魔力回應術專區)</option>
+            </select>
+            <small style="color: var(--text-muted); font-size: 0.78rem;">可設定此碼能開啟全部功能、僅限四大道館、或僅限 NLP 語言回應術專區</small>
           </div>
 
           <div class="form-group">
@@ -793,6 +811,15 @@
             <button type="button" class="btn btn-outline btn-sm btn-quick-extend" data-days="365">+365 天</button>
             <button type="button" class="btn btn-outline btn-sm btn-quick-extend" data-perm="true" style="border-color: #d97706; color: #b45309; font-weight: 700;">設為永久有效</button>
           </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label for="selectEditSubScope">調整授權適用範圍</label>
+          <select id="selectEditSubScope" class="form-control">
+            <option value="all">🌟 全部權限 (一般四大道館 + NLP專屬區)</option>
+            <option value="general">🛡️ 一般權限 (僅四大道館與常規功能)</option>
+            <option value="exclusive">🪄 專屬權限 (僅NLP語言魔力回應術專區)</option>
+          </select>
         </div>
 
         <div class="form-group" style="margin-top: 1rem;">

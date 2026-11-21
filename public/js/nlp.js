@@ -187,6 +187,26 @@ window.NlpManager = (function() {
         return false;
       }
     }
+
+    // 檢查授權範圍：若為一般道館權限，提示需要專屬或全部授權
+    let sub = null;
+    if (typeof window.getSavedSubscription === 'function') {
+      sub = window.getSavedSubscription();
+    } else {
+      try {
+        const raw = localStorage.getItem('coachquest_subscription_v1');
+        if (raw) sub = JSON.parse(raw);
+      } catch (_) {}
+    }
+
+    if (sub && sub.scope === 'general') {
+      if (typeof window.showSubscriptionModal === 'function') {
+        window.showSubscriptionModal('此授權碼為【一般道館權限】，NLP 回應術專區需要【專屬】或【全部】授權碼，請聯繫 Sunny 教練升級。');
+      } else {
+        alert('此授權碼為【一般道館權限】，NLP 回應術專區需要【專屬】或【全部】授權碼，請聯繫 Sunny 教練升級。');
+      }
+      return false;
+    }
     return true;
   }
 

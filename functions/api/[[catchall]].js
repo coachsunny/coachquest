@@ -208,14 +208,16 @@ async function saveStoredSubscriptionCodes(env, codes) {
   }
 }
 
-async function verifySubscriptionCode(code, env, request = null) {
-  // 若帶有合法管理員 token，直接開通管理員測試通行
+async function verifySubscriptionCode(code, env, request = null, requiredScope = null) {
+  // 若帶有合法管理員 token，直接開通管理員測試通行（全權限）
   if (request && verifyAdminSession(request, env)) {
     return {
       valid: true,
       code: 'ADMIN-PASS',
       name: '導師管理員',
       type: 'permanent',
+      scope: 'all',
+      scopeName: '全部權限',
       isPermanent: true,
       expireAt: null,
       daysLeft: 99999
@@ -259,6 +261,27 @@ async function verifySubscriptionCode(code, env, request = null) {
     }
   }
 
+  const codeScope = found.scope || 'all'; // 預設或相容舊碼為 all
+
+  // 授權範圍校驗：一般 vs 專屬 vs 全部
+  if (requiredScope === 'general' && codeScope === 'exclusive') {
+    return {
+      valid: false,
+      scopeBlocked: true,
+      codeScope,
+      error: '此授權碼為【專屬區限定】，不可進入四大道館對決。如需挑戰四大道館，請聯繫 Sunny 教練調整為【一般】或【全部】權限。'
+    };
+  }
+
+  if (requiredScope === 'exclusive' && codeScope === 'general') {
+    return {
+      valid: false,
+      scopeBlocked: true,
+      codeScope,
+      error: '此授權碼為【一般道館權限】，NLP 回應術專區需要【專屬】或【全部】授權碼，請聯繫 Sunny 教練升級。'
+    };
+  }
+
   // 記錄使用狀態
   found.lastUsedAt = new Date().toISOString();
   found.useCount = (Number(found.useCount) || 0) + 1;
@@ -269,11 +292,15 @@ async function verifySubscriptionCode(code, env, request = null) {
     daysLeft = Math.max(0, Math.ceil((new Date(found.expireAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
   }
 
+  const scopeName = codeScope === 'general' ? '一般道館' : (codeScope === 'exclusive' ? 'NLP專屬區' : '全部權限');
+
   return {
     valid: true,
     code: found.code,
     name: found.name || '學員教練',
     type: found.type,
+    scope: codeScope,
+    scopeName,
     isPermanent: found.type === 'permanent',
     expireAt: found.expireAt,
     daysLeft
@@ -937,9 +964,9 @@ export async function handleApiRequest(request, env) {
       const body = await request.json();
       const { bossId, messages = [], turn = 1, userModel } = body;
 
-      // 檢驗訂閱授權碼
+      // 檢驗訂閱授權碼 (一般道館對決需一般或全部權限)
       const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'general');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -981,9 +1008,9 @@ export async function handleApiRequest(request, env) {
       const body = await request.json();
       const { bossId, messages = [], userModel } = body;
 
-      // 檢驗訂閱授權碼
+      // 檢驗訂閱授權碼 (一般道館對決需一般或全部權限)
       const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'general');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1022,9 +1049,9 @@ export async function handleApiRequest(request, env) {
       const body = await request.json();
       const { bossId, messages = [], userModel } = body;
 
-      // 檢驗訂閱授權碼
+      // 檢驗訂閱授權碼 (一般道館對決需一般或全部權限)
       const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'general');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1112,7 +1139,7 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/nlp/question' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'exclusive');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1162,7 +1189,7 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/nlp/listen/evaluate' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'exclusive');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1222,7 +1249,7 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/nlp/response/evaluate' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'exclusive');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1282,7 +1309,7 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/nlp/report' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'exclusive');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1388,7 +1415,7 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/room/create' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'general');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -1653,7 +1680,7 @@ export async function handleApiRequest(request, env) {
     if (pathname === '/room/evaluate' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
-      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      const subCheck = await verifySubscriptionCode(subCode, env, request, 'general');
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
           ok: false,
@@ -2328,6 +2355,7 @@ export async function handleApiRequest(request, env) {
       const codes = await getStoredSubscriptionCodes(env);
       const search = (url.searchParams.get('search') || '').toLowerCase().trim();
       const statusFilter = (url.searchParams.get('status') || 'all').trim();
+      const scopeFilter = (url.searchParams.get('scope') || 'all_scope').trim();
 
       const now = Date.now();
       const sevenDays = 7 * 86400000;
@@ -2352,12 +2380,25 @@ export async function handleApiRequest(request, env) {
         filtered = filtered.filter(c => c.status === 'disabled');
       }
 
+      // 範圍篩選：all (全部) / general (一般) / exclusive (專屬)
+      if (scopeFilter === 'all') {
+        filtered = filtered.filter(c => (c.scope || 'all') === 'all');
+      } else if (scopeFilter === 'general') {
+        filtered = filtered.filter(c => c.scope === 'general');
+      } else if (scopeFilter === 'exclusive') {
+        filtered = filtered.filter(c => c.scope === 'exclusive');
+      }
+
       const totalCount = codes.length;
       const activeCount = codes.filter(c => c.status === 'active' && (c.type === 'permanent' || !c.expireAt || new Date(c.expireAt).getTime() >= now)).length;
       const permanentCount = codes.filter(c => c.type === 'permanent').length;
       const expiringCount = codes.filter(c => c.status === 'active' && c.type !== 'permanent' && c.expireAt && (new Date(c.expireAt).getTime() - now <= sevenDays) && (new Date(c.expireAt).getTime() >= now)).length;
       const expiredCount = codes.filter(c => c.type !== 'permanent' && c.expireAt && new Date(c.expireAt).getTime() < now).length;
       const disabledCount = codes.filter(c => c.status === 'disabled').length;
+
+      const allScopeCount = codes.filter(c => (c.scope || 'all') === 'all').length;
+      const generalScopeCount = codes.filter(c => c.scope === 'general').length;
+      const exclusiveScopeCount = codes.filter(c => c.scope === 'exclusive').length;
 
       return new Response(JSON.stringify({
         ok: true,
@@ -2367,7 +2408,10 @@ export async function handleApiRequest(request, env) {
           permanentCount,
           expiringCount,
           expiredCount,
-          disabledCount
+          disabledCount,
+          allScopeCount,
+          generalScopeCount,
+          exclusiveScopeCount
         },
         codes: filtered,
         subscriptions: filtered,
@@ -2407,10 +2451,13 @@ export async function handleApiRequest(request, env) {
         expireAt = null;
       }
 
+      const scope = (body.scope === 'general' || body.scope === 'exclusive') ? body.scope : 'all';
+
       const newEntry = {
         code,
         name: (body.name || '學員教練').trim(),
         type,
+        scope,
         expireAt,
         status: 'active',
         createdAt: new Date().toISOString(),
@@ -2447,6 +2494,9 @@ export async function handleApiRequest(request, env) {
       if (body.name) entry.name = String(body.name).trim();
       if (body.status === 'active' || body.status === 'disabled') {
         entry.status = body.status;
+      }
+      if (body.scope && (body.scope === 'all' || body.scope === 'general' || body.scope === 'exclusive')) {
+        entry.scope = body.scope;
       }
 
       if (body.setPermanent === true) {

@@ -49,6 +49,7 @@ const elements = {
 
   // 篩選與工具 (訂閱授權)
   filterSubSearch: document.getElementById('filterSubSearch'),
+  filterSubScope: document.getElementById('filterSubScope'),
   filterSubStatus: document.getElementById('filterSubStatus'),
   btnOpenCreateSubModal: document.getElementById('btnOpenCreateSubModal'),
   btnExportSubs: document.getElementById('btnExportSubs'),
@@ -72,6 +73,7 @@ const elements = {
   inputCreateSubCode: document.getElementById('inputCreateSubCode'),
   btnRandomSubCode: document.getElementById('btnRandomSubCode'),
   inputCreateSubName: document.getElementById('inputCreateSubName'),
+  selectCreateSubScope: document.getElementById('selectCreateSubScope'),
   selectCreateSubType: document.getElementById('selectCreateSubType'),
   groupCustomDays: document.getElementById('groupCustomDays'),
   inputCreateSubCustomDays: document.getElementById('inputCreateSubCustomDays'),
@@ -84,6 +86,7 @@ const elements = {
   editSubCodeDisplay: document.getElementById('editSubCodeDisplay'),
   editSubNameDisplay: document.getElementById('editSubNameDisplay'),
   editSubStatusDisplay: document.getElementById('editSubStatusDisplay'),
+  selectEditSubScope: document.getElementById('selectEditSubScope'),
   inputEditSubName: document.getElementById('inputEditSubName'),
   selectEditSubStatus: document.getElementById('selectEditSubStatus'),
   btnCloseEditSubModal: document.getElementById('btnCloseEditSubModal'),
@@ -188,6 +191,7 @@ function bindEvents() {
     clearTimeout(subSearchTimer);
     subSearchTimer = setTimeout(() => loadSubscriptions(), 300);
   });
+  elements.filterSubScope?.addEventListener('change', () => loadSubscriptions());
   elements.filterSubStatus?.addEventListener('change', () => loadSubscriptions());
 
   // 訂閱建立彈窗
@@ -1080,10 +1084,11 @@ async function loadSubscriptions() {
   if (!token) return;
 
   const search = encodeURIComponent(elements.filterSubSearch?.value.trim() || '');
+  const scope = encodeURIComponent(elements.filterSubScope?.value || 'all_scope');
   const status = encodeURIComponent(elements.filterSubStatus?.value || 'all');
 
   try {
-    const res = await fetch(`/api/admin/subscriptions?search=${search}&status=${status}`, {
+    const res = await fetch(`/api/admin/subscriptions?search=${search}&status=${status}&scope=${scope}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
@@ -1133,6 +1138,14 @@ function renderSubscriptionsTable(subs) {
     const isExpiring = !isPerm && s.expireAt && !isExpired && (new Date(s.expireAt).getTime() - now <= sevenDays);
     const isDisabled = s.status === 'disabled';
 
+    const scope = s.scope || 'all';
+    let scopeBadge = '<span class="badge" style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; font-weight:700;">🌟 全部權限</span>';
+    if (scope === 'general') {
+      scopeBadge = '<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:700;">🛡️ 一般道館</span>';
+    } else if (scope === 'exclusive') {
+      scopeBadge = '<span class="badge" style="background:#fdf4ff; color:#a21caf; border:1px solid #f5d0fe; font-weight:700;">🪄 NLP專屬</span>';
+    }
+
     let statusBadge = '<span class="badge badge-success">🟢 生效中</span>';
     if (isDisabled) {
       statusBadge = '<span class="badge" style="background:#f1f5f9; color:#64748b;">⚪ 已停用</span>';
@@ -1173,6 +1186,7 @@ function renderSubscriptionsTable(subs) {
         <div style="font-weight:700; color:#0f172a;">${escapeHtml(s.name || '學員教練')}</div>
         <div style="font-size:0.75rem; color:#94a3b8;">建立於 ${new Date(s.createdAt).toLocaleDateString('zh-TW')}</div>
       </td>
+      <td>${scopeBadge}</td>
       <td>${typeDesc}</td>
       <td>${expireDesc}</td>
       <td>${statusBadge}</td>
@@ -1243,6 +1257,7 @@ function generateRandomSubCode() {
 function openCreateSubModal() {
   generateRandomSubCode();
   if (elements.inputCreateSubName) elements.inputCreateSubName.value = '';
+  if (elements.selectCreateSubScope) elements.selectCreateSubScope.value = 'all';
   if (elements.selectCreateSubType) elements.selectCreateSubType.value = 'days_30';
   elements.groupCustomDays?.classList.add('hidden');
   elements.modalCreateSub?.classList.remove('hidden');
@@ -1258,6 +1273,7 @@ async function handleCreateSubscription() {
 
   const code = (elements.inputCreateSubCode?.value || '').trim().toUpperCase();
   const name = (elements.inputCreateSubName?.value || '').trim();
+  const scope = elements.selectCreateSubScope?.value || 'all';
   const typeVal = elements.selectCreateSubType?.value || 'days_30';
 
   if (!name) {
@@ -1290,7 +1306,7 @@ async function handleCreateSubscription() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ code, name, type, days })
+      body: JSON.stringify({ code, name, scope, type, days })
     });
     const data = await res.json();
     if (data.ok) {
@@ -1320,6 +1336,7 @@ function openEditSubModal(code) {
       : (isExpired ? '<span style="color:#dc2626;">已過期</span>' : (isPerm ? '<span style="color:#d97706;">永久有效</span>' : '生效中'));
   }
 
+  if (elements.selectEditSubScope) elements.selectEditSubScope.value = sub.scope || 'all';
   if (elements.inputEditSubName) elements.inputEditSubName.value = sub.name || '';
   if (elements.selectEditSubStatus) elements.selectEditSubStatus.value = sub.status || 'active';
 
@@ -1371,6 +1388,7 @@ async function handleEditSubscription() {
 
   const name = (elements.inputEditSubName?.value || '').trim();
   const status = elements.selectEditSubStatus?.value || 'active';
+  const scope = elements.selectEditSubScope?.value || 'all';
 
   try {
     const res = await fetch('/api/admin/subscriptions/update', {
@@ -1379,7 +1397,7 @@ async function handleEditSubscription() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ code: editingSubscription.code, name, status })
+      body: JSON.stringify({ code: editingSubscription.code, name, status, scope })
     });
     const data = await res.json();
     if (data.ok) {

@@ -146,6 +146,7 @@ function initElements() {
     subStatusBadge: document.getElementById('subStatusBadge'),
     subCurrentCodeText: document.getElementById('subCurrentCodeText'),
     subCurrentNameText: document.getElementById('subCurrentNameText'),
+    subScopeText: document.getElementById('subScopeText'),
     subExpiryText: document.getElementById('subExpiryText'),
     inputSubCode: document.getElementById('inputSubCode'),
     btnVerifySubCode: document.getElementById('btnVerifySubCode'),
@@ -418,6 +419,16 @@ function bindMultiplayerEvents() {
 
   // 建立房間提交
   elements.btnCreateRoomSubmit?.addEventListener('click', async () => {
+    if (!isSubscriptionActive()) {
+      openSubscriptionModal('請先輸入並啟用有效的教練實戰訂閱授權碼，即可開啟約戰房間！');
+      return;
+    }
+    const currentSub = getSavedSubscription();
+    if (currentSub && currentSub.scope === 'exclusive') {
+      openSubscriptionModal('此授權碼為【NLP專屬區限定】，四大道館約戰需使用【一般】或【全部】授權碼。歡迎聯繫 Sunny 教練調整權限！');
+      return;
+    }
+
     const player = InventoryManager.getPlayerData();
     const bossId = elements.selectMpBoss?.value || 'boss_work_1';
     const mode = state.selectedMpMode;
@@ -921,6 +932,12 @@ function renderBossGrid() {
 export function startBossBattle(bossId) {
   if (!isSubscriptionActive()) {
     openSubscriptionModal('請先輸入並啟用有效的教練實戰訂閱授權碼，即可挑戰道館關主！');
+    return;
+  }
+
+  const currentSub = getSavedSubscription();
+  if (currentSub && currentSub.scope === 'exclusive') {
+    openSubscriptionModal('此授權碼為【NLP專屬區限定】，四大道館對決需使用【一般】或【全部】授權碼。歡迎聯繫 Sunny 教練調整權限！');
     return;
   }
 
@@ -3341,15 +3358,17 @@ export function updateSubscriptionNavBadge() {
   }
   const isPerm = sub.isPermanent || sub.type === 'permanent';
   const isExpired = !isPerm && sub.expireAt && new Date(sub.expireAt).getTime() < Date.now();
+  const scope = sub.scope || 'all';
+  const scopeTag = scope === 'general' ? '一般' : (scope === 'exclusive' ? 'NLP專屬' : '全部');
 
   if (isPerm) {
-    elements.navSubStatusBadge.textContent = 'VIP';
+    elements.navSubStatusBadge.textContent = `${scopeTag}·VIP`;
     elements.navSubStatusBadge.style.background = '#7c3aed';
   } else if (isExpired) {
     elements.navSubStatusBadge.textContent = '已過期';
     elements.navSubStatusBadge.style.background = '#ef4444';
   } else {
-    elements.navSubStatusBadge.textContent = sub.daysLeft !== undefined ? `${sub.daysLeft}天` : '有效';
+    elements.navSubStatusBadge.textContent = `${scopeTag} (${sub.daysLeft !== undefined ? sub.daysLeft + '天' : '有效'})`;
     elements.navSubStatusBadge.style.background = '#10b981';
   }
 }
@@ -3373,6 +3392,8 @@ export async function refreshSubscriptionStatus() {
         code: sub.code,
         name: sub.name,
         type: sub.type,
+        scope: sub.scope || 'all',
+        scopeName: sub.scopeName || (sub.scope === 'general' ? '一般道館' : (sub.scope === 'exclusive' ? 'NLP專屬區' : '全部權限')),
         isPermanent: sub.isPermanent,
         expireAt: sub.expireAt,
         daysLeft: sub.daysLeft,
@@ -3416,6 +3437,15 @@ export function openSubscriptionModal(customMessage = null) {
 
     const isPerm = sub.isPermanent || sub.type === 'permanent';
     const isExpired = !isPerm && sub.expireAt && new Date(sub.expireAt).getTime() < Date.now();
+    const scope = sub.scope || 'all';
+    const scopeBadge = scope === 'general'
+      ? '🛡️ 一般權限 (四大道館)'
+      : (scope === 'exclusive' ? '🪄 專屬權限 (NLP語言回應術專區)' : '🌟 全部權限 (四大道館 + NLP專屬區)');
+
+    if (elements.subScopeText) {
+      elements.subScopeText.style.display = 'block';
+      elements.subScopeText.innerHTML = `授權適用範圍：<span style="color:#6d28d9; font-weight:800;">${scopeBadge}</span>`;
+    }
 
     if (elements.subStatusBadge) {
       if (isPerm) {
@@ -3445,6 +3475,10 @@ export function openSubscriptionModal(customMessage = null) {
   } else {
     if (elements.subCurrentCodeText) elements.subCurrentCodeText.textContent = '尚未綁定';
     if (elements.subCurrentNameText) elements.subCurrentNameText.textContent = '';
+    if (elements.subScopeText) {
+      elements.subScopeText.style.display = 'none';
+      elements.subScopeText.textContent = '';
+    }
     if (elements.subStatusBadge) {
       elements.subStatusBadge.textContent = '未啟用授權';
       elements.subStatusBadge.style.background = '#fee2e2';
@@ -3495,11 +3529,16 @@ export async function handleVerifySubscriptionCode() {
         code: sub.code,
         name: sub.name,
         type: sub.type,
+        scope: sub.scope || 'all',
+        scopeName: sub.scopeName || (sub.scope === 'general' ? '一般道館' : (sub.scope === 'exclusive' ? 'NLP專屬區' : '全部權限')),
         isPermanent: sub.isPermanent,
         expireAt: sub.expireAt,
         daysLeft: sub.daysLeft,
         verifiedAt: new Date().toISOString()
       });
+
+      const scope = sub.scope || 'all';
+      const scopeTag = scope === 'general' ? '【一般權限】' : (scope === 'exclusive' ? '【NLP專屬權限】' : '【全部權限】');
 
       if (elements.subFeedbackMsg) {
         elements.subFeedbackMsg.style.display = 'block';
@@ -3507,7 +3546,7 @@ export async function handleVerifySubscriptionCode() {
         elements.subFeedbackMsg.style.background = '#ecfdf5';
         elements.subFeedbackMsg.style.padding = '0.5rem 0.75rem';
         elements.subFeedbackMsg.style.borderRadius = '6px';
-        elements.subFeedbackMsg.textContent = `🎉 驗證成功！${sub.isPermanent ? '已啟用永久尊榮授權' : `有效期限至 ${new Date(sub.expireAt).toLocaleDateString('zh-TW')}（剩餘 ${sub.daysLeft} 天）`}`;
+        elements.subFeedbackMsg.textContent = `🎉 驗證成功！已啟用 ${scopeTag} ${sub.isPermanent ? '永久尊榮授權' : `有效期限至 ${new Date(sub.expireAt).toLocaleDateString('zh-TW')}（剩餘 ${sub.daysLeft} 天）`}`;
       }
 
       openSubscriptionModal();
