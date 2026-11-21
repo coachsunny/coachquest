@@ -1352,16 +1352,33 @@ window.NlpManager = (function() {
     if (!dom.dlgChatBox) return;
     dom.dlgChatBox.innerHTML = '';
 
+    let openingDialogue = boss.openingStatement;
+    let openingInnerThought = boss.openingInnerThought;
+    let openingMood = '眼神迴避，防衛緊繃';
+
+    // 支援同一關主每次練習動態隨機抽取不同心情與起手開場白
+    if (typeof window.getBossOpening === 'function' && Array.isArray(window.BOSSES)) {
+      const matchBoss = window.BOSSES.find(b => b.id === boss.id);
+      if (matchBoss) {
+        const op = window.getBossOpening(matchBoss);
+        if (op && op.dialogue) {
+          openingDialogue = op.dialogue;
+          openingInnerThought = op.innerThought || openingInnerThought;
+          openingMood = op.mood || openingMood;
+        }
+      }
+    }
+
     state.dialogueHistory = [
       {
         role: 'assistant',
         speaker: boss.name,
-        content: boss.openingStatement,
-        innerThought: boss.openingInnerThought
+        content: openingDialogue,
+        innerThought: openingInnerThought
       }
     ];
 
-    appendBossMessage(boss.name, boss.avatar, boss.openingStatement, boss.openingInnerThought, '眼神迴避，防衛緊繃');
+    appendBossMessage(boss.name, boss.avatar, openingDialogue, openingInnerThought, openingMood);
   }
 
   function appendBossMessage(name, avatar, statement, innerThought, mood) {

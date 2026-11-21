@@ -9,6 +9,12 @@ import { LeaderboardManager } from './leaderboard.js';
 import { MultiplayerManager } from './multiplayer.js';
 import { LangManager } from './lang.js';
 
+// 暴露至全域供專屬模組（如 NLP 對話演練）隨機調度關主動態開場白
+if (typeof window !== 'undefined') {
+  window.BOSSES = BOSSES;
+  window.getBossOpening = getBossOpening;
+}
+
 // 全域遊戲狀態
 const state = {
   currentCategory: 'work',   // work | parenting | couple | friends
