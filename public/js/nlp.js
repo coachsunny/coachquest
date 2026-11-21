@@ -98,6 +98,8 @@ window.NlpManager = (function() {
       btnListenNext: document.getElementById('btnNlpListenNext'),
       btnListenFinish: document.getElementById('btnNlpListenFinish'),
       btnListenBackHub: document.getElementById('btnNlpListenBackHub'),
+      btnToggleListenHints: document.getElementById('btnToggleNlpListenHints'),
+      listenHintDrawer: document.getElementById('nlpListenHintDrawer'),
 
       // 回應關 elements
       respCategory: document.getElementById('nlpRespCategory'),
@@ -119,6 +121,10 @@ window.NlpManager = (function() {
       btnRespNext: document.getElementById('btnNlpRespNext'),
       btnRespFinish: document.getElementById('btnNlpRespFinish'),
       btnRespBackHub: document.getElementById('btnNlpRespBackHub'),
+      btnToggleRespHints: document.getElementById('btnToggleNlpRespHints'),
+      respHintDrawer: document.getElementById('nlpRespHintDrawer'),
+      respSubHint: document.getElementById('nlpRespSubHint'),
+      respExampleHint: document.getElementById('nlpRespExampleHint'),
 
       // 結算報告 elements
       reportStudentName: document.getElementById('nlpReportStudentName'),
@@ -199,6 +205,10 @@ window.NlpManager = (function() {
       state.selectedCategory = e.target.value;
       loadNextQuestion('response');
     });
+
+    // 提示收合切換
+    dom.btnToggleListenHints?.addEventListener('click', () => toggleListenHints());
+    dom.btnToggleRespHints?.addEventListener('click', () => toggleRespHints());
 
     // 結算報告動作
     dom.btnCopyReportMd?.addEventListener('click', copyReportMarkdown);
@@ -296,6 +306,65 @@ window.NlpManager = (function() {
     dom.screenReport?.classList.add('hidden');
   }
 
+  let listenHintsVisible = false;
+  function toggleListenHints(forceState) {
+    listenHintsVisible = typeof forceState === 'boolean' ? forceState : !listenHintsVisible;
+    if (dom.listenHintDrawer) {
+      dom.listenHintDrawer.style.display = listenHintsVisible ? 'block' : 'none';
+    }
+    const screenListen = dom.screenListen || document.getElementById('nlpScreenListen');
+    if (screenListen) {
+      screenListen.querySelectorAll('.nlp-sub-hint').forEach(el => {
+        el.style.display = listenHintsVisible ? 'block' : 'none';
+      });
+      screenListen.querySelectorAll('.nlp-example-hint').forEach(el => {
+        el.style.display = listenHintsVisible ? 'block' : 'none';
+      });
+    }
+    if (dom.btnToggleListenHints) {
+      dom.btnToggleListenHints.innerHTML = listenHintsVisible
+        ? '✕ 隱藏破題提示'
+        : '💡 顯示破題提示與思考指引';
+      if (listenHintsVisible) {
+        dom.btnToggleListenHints.style.background = '#fef3c7';
+        dom.btnToggleListenHints.style.borderColor = '#d97706';
+        dom.btnToggleListenHints.style.color = '#92400e';
+      } else {
+        dom.btnToggleListenHints.style.background = '#fffbeb';
+        dom.btnToggleListenHints.style.borderColor = '#f59e0b';
+        dom.btnToggleListenHints.style.color = '#b45309';
+      }
+    }
+  }
+
+  let respHintsVisible = false;
+  function toggleRespHints(forceState) {
+    respHintsVisible = typeof forceState === 'boolean' ? forceState : !respHintsVisible;
+    if (dom.respHintDrawer) {
+      dom.respHintDrawer.style.display = respHintsVisible ? 'block' : 'none';
+    }
+    if (dom.respSubHint) {
+      dom.respSubHint.style.display = respHintsVisible ? 'block' : 'none';
+    }
+    if (dom.respExampleHint) {
+      dom.respExampleHint.style.display = respHintsVisible ? 'block' : 'none';
+    }
+    if (dom.btnToggleRespHints) {
+      dom.btnToggleRespHints.innerHTML = respHintsVisible
+        ? '✕ 隱藏回應指引'
+        : '💡 顯示破框思考指引';
+      if (respHintsVisible) {
+        dom.btnToggleRespHints.style.background = '#f3e8ff';
+        dom.btnToggleRespHints.style.borderColor = '#9333ea';
+        dom.btnToggleRespHints.style.color = '#581c87';
+      } else {
+        dom.btnToggleRespHints.style.background = '#faf5ff';
+        dom.btnToggleRespHints.style.borderColor = '#a855f7';
+        dom.btnToggleRespHints.style.color = '#7e22ce';
+      }
+    }
+  }
+
   // 開始練習指定關卡
   async function startPractice(mode) {
     if (!checkSubscription()) return;
@@ -334,12 +403,14 @@ window.NlpManager = (function() {
     if (submitBtn) submitBtn.disabled = false;
 
     if (isListen) {
+      toggleListenHints(false);
       if (dom.inputBelief) dom.inputBelief.value = '';
       if (dom.inputEmotion) dom.inputEmotion.value = '';
       if (dom.inputNeed) dom.inputNeed.value = '';
       if (dom.listenFeedbackScore) dom.listenFeedbackScore.textContent = '--';
       if (dom.listenDimensionShiftBox) dom.listenDimensionShiftBox.innerHTML = '';
     } else {
+      toggleRespHints(false);
       if (dom.inputResponse) dom.inputResponse.value = '';
       if (dom.respFeedbackScore) dom.respFeedbackScore.textContent = '--';
       if (dom.respMasterDemosBox) dom.respMasterDemosBox.innerHTML = '';

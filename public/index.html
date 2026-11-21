@@ -968,7 +968,23 @@
             <span class="category-badge" id="nlpListenCategoryBadge">職場協作</span>
           </div>
           <div class="nlp-q-statement" id="nlpListenStatement">『題目載入中……』</div>
-          <div class="nlp-q-hint">💡 請仔細傾聽上述話語，嘗試區分對方受困的<b>表層做法 (How)</b>、深層的<b>情緒</b>，與拉高維度後的<b>核心渴望 (Desire)</b>：</div>
+
+          <!-- 提示切換按鈕 -->
+          <div style="margin-top: 0.85rem; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn btn-outline btn-sm" id="btnToggleNlpListenHints" style="font-size: 0.8rem; padding: 4px 12px; border-color: #f59e0b; color: #b45309; background: #fffbeb; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
+              💡 顯示破題提示與思考指引
+            </button>
+          </div>
+
+          <!-- 可收合的提示抽屜 (預設隱藏，學員需要時才顯示) -->
+          <div class="nlp-q-hint-drawer" id="nlpListenHintDrawer" style="display: none; margin-top: 0.75rem; background: #fffbeb; border: 1.5px dashed #f59e0b; border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.85rem; color: #78350f;">
+            <div style="font-weight: 800; color: #92400e; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+              <span>💡 解題思考核心指南（維度轉換）：</span>
+            </div>
+            <div style="line-height: 1.5; color: #92400e; font-size: 0.82rem;">
+              請仔細傾聽上述話語，嘗試區分對方受困的<b>表層做法 (How)</b>、深層隱藏的<b>真實情緒</b>，與拉高維度後的<b>核心渴望 (Desire)</b>。
+            </div>
+          </div>
         </div>
 
         <!-- 學員解構輸入區 -->
@@ -976,25 +992,34 @@
           <div class="nlp-input-block">
             <label class="nlp-input-label">
               <span>🧠 1. 觀點解析 (信念/前提假設)</span>
-              <small>對方持有什麼僵化信念？將什麼與什麼綁定？</small>
+              <small class="nlp-sub-hint" style="display: none; color: #b45309; font-weight: 600;">對方持有什麼僵化信念？將什麼與什麼綁定？</small>
             </label>
-            <textarea id="inputNlpBelief" class="nlp-textarea" rows="2" placeholder="例：認為只有考上這張證照才能證明自己；認為溝通只是在浪費時間..."></textarea>
+            <textarea id="inputNlpBelief" class="nlp-textarea" rows="2" placeholder="請輸入你解讀到的觀點（信念 / 前提假設）..."></textarea>
+            <div class="nlp-example-hint" style="display: none; font-size: 0.75rem; color: #64748b; margin-top: 4px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+              💡 範例：認為只有考上這張證照才能證明自己；認為溝通只是在浪費時間...
+            </div>
           </div>
 
           <div class="nlp-input-block">
             <label class="nlp-input-label">
               <span>🌊 2. 情緒感受 (內在真實情緒)</span>
-              <small>話語背後隱藏著什麼未說出口的情緒？</small>
+              <small class="nlp-sub-hint" style="display: none; color: #b45309; font-weight: 600;">話語背後隱藏著什麼未說出口的情緒？</small>
             </label>
-            <textarea id="inputNlpEmotion" class="nlp-textarea" rows="2" placeholder="例：挫折、委屈、焦慮、害怕出醜、對失控的深深恐懼..."></textarea>
+            <textarea id="inputNlpEmotion" class="nlp-textarea" rows="2" placeholder="請輸入你體會到的深層情緒感受..."></textarea>
+            <div class="nlp-example-hint" style="display: none; font-size: 0.75rem; color: #64748b; margin-top: 4px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+              💡 範例：挫折、委屈、焦慮、害怕出醜、對失控的深深恐懼...
+            </div>
           </div>
 
           <div class="nlp-input-block">
             <label class="nlp-input-label">
               <span>✨ 3. 需要 / 核心渴望 (正面意圖)</span>
-              <small>拉高維度後，對方真正渴望與需要的是什麼？</small>
+              <small class="nlp-sub-hint" style="display: none; color: #b45309; font-weight: 600;">拉高維度後，對方真正渴望與需要的是什麼？</small>
             </label>
-            <textarea id="inputNlpNeed" class="nlp-textarea" rows="2" placeholder="例：渴望專業價值被認可、渴望成果品質的安心感、渴望在關係中感受到被牽掛..."></textarea>
+            <textarea id="inputNlpNeed" class="nlp-textarea" rows="2" placeholder="請輸入關主拉高維度後的核心渴望..."></textarea>
+            <div class="nlp-example-hint" style="display: none; font-size: 0.75rem; color: #64748b; margin-top: 4px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+              💡 範例：渴望專業價值被認可、渴望成果品質的安心感、渴望在關係中感受到被牽掛...
+            </div>
           </div>
         </div>
 
@@ -1061,7 +1086,20 @@
             <span class="category-badge" id="nlpRespCategoryBadge">個人突破</span>
           </div>
           <div class="nlp-q-statement" id="nlpRespStatement">『題目載入中……』</div>
-          <div class="nlp-q-hint">🪄 運用 NLP 語言回應術（Sleight of Mouth）進行換框回應，鬆動對方頑固的限制性信念：</div>
+
+          <!-- 提示切換按鈕 -->
+          <div style="margin-top: 0.85rem; display: flex; justify-content: flex-end;">
+            <button type="button" class="btn btn-outline btn-sm" id="btnToggleNlpRespHints" style="font-size: 0.8rem; padding: 4px 12px; border-color: #a855f7; color: #7e22ce; background: #faf5ff; font-weight: 700; border-radius: 8px; cursor: pointer; transition: all 0.2s ease;">
+              💡 顯示破框思考指引
+            </button>
+          </div>
+
+          <!-- 可收合的提示抽屜 (預設隱藏，學員需要時才顯示) -->
+          <div class="nlp-q-hint-drawer" id="nlpRespHintDrawer" style="display: none; margin-top: 0.75rem; background: #faf5ff; border: 1.5px dashed #c084fc; border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.85rem; color: #581c87;">
+            <div style="font-weight: 800; color: #6b21a8; margin-bottom: 0.35rem;">
+              🪄 <b>破框心法要訣：</b>運用 NLP 語言回應術（Sleight of Mouth）進行換框回應。肯定其正面初衷，鬆動受困於表層單一做法的執念，開啟更高維度的無限可能。
+            </div>
+          </div>
         </div>
 
         <!-- 14 模式快選按鈕列 -->
@@ -1074,9 +1112,12 @@
         <div class="nlp-resp-input-box">
           <label class="nlp-input-label">
             <span>💬 你的教練破框回應話語：</span>
-            <small>肯定正面意圖、鬆動僵化做法、開啟全新維度</small>
+            <small id="nlpRespSubHint" style="display: none; color: #7e22ce; font-weight: 600;">肯定正面意圖、鬆動僵化做法、開啟全新維度</small>
           </label>
-          <textarea id="inputNlpResponse" class="nlp-textarea" rows="3" placeholder="輸入你想對關主說的話……例如：「我非常理解你追求……的初衷。如果換個角度來看……」"></textarea>
+          <textarea id="inputNlpResponse" class="nlp-textarea" rows="3" placeholder="輸入你想對關主說的破框回應話語……"></textarea>
+          <div id="nlpRespExampleHint" style="display: none; font-size: 0.75rem; color: #64748b; margin-top: 4px; background: #f8fafc; padding: 4px 8px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+            💡 示範句型：例如：「我非常理解你追求……的初衷。如果換個角度來看……」
+          </div>
         </div>
 
         <div class="nlp-action-bar">
