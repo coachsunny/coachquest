@@ -166,13 +166,23 @@ window.NlpManager = (function() {
 
   // 檢查訂閱授權（未啟用則彈出提示）
   function checkSubscription() {
+    const code = getSubCode();
+    if (!code) {
+      if (typeof window.showSubscriptionModal === 'function') {
+        window.showSubscriptionModal('🪄 NLP 語言魔力回應術專區為高級實戰功能，請先啟用有效訂閱授權碼。');
+      } else {
+        alert('請先啟用教練實戰訂閱授權碼，即可開啟 NLP 回應術專區！');
+      }
+      return false;
+    }
+
     if (typeof window.isSubscriptionActive === 'function') {
       const active = window.isSubscriptionActive();
       if (!active) {
         if (typeof window.showSubscriptionModal === 'function') {
-          window.showSubscriptionModal('🪄 NLP 語言魔力回應術專區為高級實戰功能，請先啟用有效訂閱授權碼。');
+          window.showSubscriptionModal('🪄 您的訂閱授權已過期，請聯繫教練續期後即可暢玩 NLP 回應術專區。');
         } else {
-          alert('請先啟用教練實戰訂閱授權碼，即可開啟 NLP 回應術專區！');
+          alert('您的訂閱授權已過期，請聯繫教練取得有效訂閱授權碼！');
         }
         return false;
       }
@@ -180,9 +190,20 @@ window.NlpManager = (function() {
     return true;
   }
 
-  // 取得當前授權碼
+  // 取得當前授權碼 (相容 coachquest_subscription_v1 與 coachquest_subscription_code)
   function getSubCode() {
-    return localStorage.getItem('coachquest_subscription_code') || '';
+    if (typeof window.getSavedSubscription === 'function') {
+      const sub = window.getSavedSubscription();
+      if (sub && sub.code) return String(sub.code).trim().toUpperCase();
+    }
+    try {
+      const raw = localStorage.getItem('coachquest_subscription_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.code) return String(parsed.code).trim().toUpperCase();
+      }
+    } catch (_) {}
+    return (localStorage.getItem('coachquest_subscription_code') || '').trim().toUpperCase();
   }
 
   // 打開專區主彈窗
@@ -259,14 +280,16 @@ window.NlpManager = (function() {
 
     try {
       const category = isListen ? (dom.listenCategory?.value || 'all') : (dom.respCategory?.value || 'all');
+      const subCode = getSubCode();
       const res = await fetch('/api/nlp/question', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-subscription-code': getSubCode()
+          'x-subscription-code': subCode
         },
         body: JSON.stringify({
           category,
+          subCode,
           excludeId: state.currentQuestion?.id || null
         })
       });
@@ -274,8 +297,12 @@ window.NlpManager = (function() {
       const data = await res.json();
       if (!data.ok) {
         if (data.error === 'SUBSCRIPTION_REQUIRED') {
-          alert(data.message || '請先啟用有效訂閱授權碼');
           closeNlpArena();
+          if (typeof window.showSubscriptionModal === 'function') {
+            window.showSubscriptionModal(data.message || '請先啟用有效訂閱授權碼');
+          } else {
+            alert(data.message || '請先啟用有效訂閱授權碼');
+          }
           return;
         }
         alert('題目載入異常，請重試');
@@ -327,17 +354,19 @@ window.NlpManager = (function() {
     }
 
     try {
+      const subCode = getSubCode();
       const res = await fetch('/api/nlp/listen/evaluate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-subscription-code': getSubCode()
+          'x-subscription-code': subCode
         },
         body: JSON.stringify({
           questionId: state.currentQuestion.id,
           userBelief: belief,
           userEmotion: emotion,
           userNeed: need,
+          subCode,
           userApiKey: localStorage.getItem('coachquest_custom_api_key') || '',
           userModel: localStorage.getItem('coachquest_custom_model') || ''
         })
@@ -345,6 +374,15 @@ window.NlpManager = (function() {
 
       const data = await res.json();
       if (!data.ok) {
+        if (data.error === 'SUBSCRIPTION_REQUIRED') {
+          closeNlpArena();
+          if (typeof window.showSubscriptionModal === 'function') {
+            window.showSubscriptionModal(data.message || '請先啟用有效訂閱授權碼');
+          } else {
+            alert(data.message || '請先啟用有效訂閱授權碼');
+          }
+          return;
+        }
         alert(data.message || '評審失敗，請確認訂閱狀態或 API 設定');
         return;
       }
@@ -522,16 +560,18 @@ window.NlpManager = (function() {
     }
 
     try {
+      const subCode = getSubCode();
       const res = await fetch('/api/nlp/response/evaluate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-subscription-code': getSubCode()
+          'x-subscription-code': subCode
         },
         body: JSON.stringify({
           questionId: state.currentQuestion.id,
           userResponse: responseText,
           targetPatternId: state.selectedPatternId,
+          subCode,
           userApiKey: localStorage.getItem('coachquest_custom_api_key') || '',
           userModel: localStorage.getItem('coachquest_custom_model') || ''
         })
@@ -539,6 +579,15 @@ window.NlpManager = (function() {
 
       const data = await res.json();
       if (!data.ok) {
+        if (data.error === 'SUBSCRIPTION_REQUIRED') {
+          closeNlpArena();
+          if (typeof window.showSubscriptionModal === 'function') {
+            window.showSubscriptionModal(data.message || '請先啟用有效訂閱授權碼');
+          } else {
+            alert(data.message || '請先啟用有效訂閱授權碼');
+          }
+          return;
+        }
         alert(data.message || '回應評審失敗');
         return;
       }
@@ -648,16 +697,18 @@ window.NlpManager = (function() {
       const player = typeof InventoryManager !== 'undefined' ? InventoryManager.getPlayerData() : {};
       const studentName = player.nickname || '學員教練';
 
+      const subCode = getSubCode();
       const res = await fetch('/api/nlp/report', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-subscription-code': getSubCode()
+          'x-subscription-code': subCode
         },
         body: JSON.stringify({
           mode,
           exercises: state.sessionExercises,
           studentName,
+          subCode,
           userApiKey: localStorage.getItem('coachquest_custom_api_key') || '',
           userModel: localStorage.getItem('coachquest_custom_model') || ''
         })
@@ -665,6 +716,15 @@ window.NlpManager = (function() {
 
       const data = await res.json();
       if (!data.ok) {
+        if (data.error === 'SUBSCRIPTION_REQUIRED') {
+          closeNlpArena();
+          if (typeof window.showSubscriptionModal === 'function') {
+            window.showSubscriptionModal(data.message || '請先啟用有效訂閱授權碼');
+          } else {
+            alert(data.message || '請先啟用有效訂閱授權碼');
+          }
+          return;
+        }
         alert(data.message || '結算報告生成失敗');
         return;
       }

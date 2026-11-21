@@ -3327,6 +3327,7 @@ export function isSubscriptionActive() {
 
 if (typeof window !== 'undefined') {
   window.isSubscriptionActive = isSubscriptionActive;
+  window.getSavedSubscription = getSavedSubscription;
   window.showSubscriptionModal = openSubscriptionModal;
 }
 

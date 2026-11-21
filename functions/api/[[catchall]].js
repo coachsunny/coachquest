@@ -1111,7 +1111,7 @@ export async function handleApiRequest(request, env) {
     // 5B. POST /api/nlp/question (抽取或指定 NLP 練習題目，含授權碼檢驗)
     if (pathname === '/nlp/question' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
       const subCheck = await verifySubscriptionCode(subCode, env, request);
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
@@ -1161,7 +1161,7 @@ export async function handleApiRequest(request, env) {
     // 5C. POST /api/nlp/listen/evaluate (第一關：傾聽解構評審)
     if (pathname === '/nlp/listen/evaluate' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
       const subCheck = await verifySubscriptionCode(subCode, env, request);
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
@@ -1221,7 +1221,7 @@ export async function handleApiRequest(request, env) {
     // 5D. POST /api/nlp/response/evaluate (第二關：破框回應評審)
     if (pathname === '/nlp/response/evaluate' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
       const subCheck = await verifySubscriptionCode(subCode, env, request);
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
@@ -1281,7 +1281,7 @@ export async function handleApiRequest(request, env) {
     // 5E. POST /api/nlp/report (生成 NLP 修煉結算報告並自動歸檔至歷史紀錄)
     if (pathname === '/nlp/report' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCode = request.headers.get('x-subscription-code') || (body && (body.subscriptionCode || body.subCode || body.code)) || '';
       const subCheck = await verifySubscriptionCode(subCode, env, request);
       if (!subCheck.valid) {
         return new Response(JSON.stringify({
