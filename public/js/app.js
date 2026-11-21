@@ -255,6 +255,16 @@ function bindEvents() {
   document.getElementById('btnNavMultiplayer')?.addEventListener('click', () => openMultiplayerModal());
   document.getElementById('btnNavPracticeLogs')?.addEventListener('click', () => openPracticeLogsListModal());
   document.getElementById('btnNavSubscription')?.addEventListener('click', () => openSubscriptionModal());
+  document.getElementById('btnNavNlp')?.addEventListener('click', () => {
+    if (window.NlpManager) {
+      window.NlpManager.openNlpArena();
+    }
+  });
+  document.getElementById('btnOpenNlpFromBanner')?.addEventListener('click', () => {
+    if (window.NlpManager) {
+      window.NlpManager.openNlpArena();
+    }
+  });
   document.getElementById('btnNavPokedex')?.addEventListener('click', () => openInventoryModal());
   document.getElementById('btnNavLeaderboard')?.addEventListener('click', () => openLeaderboardModal());
   document.getElementById('btnNavSettings')?.addEventListener('click', () => openSettingsModal());
@@ -3313,6 +3323,11 @@ export function isSubscriptionActive() {
     if (isNaN(expireTime) || expireTime < Date.now()) return false;
   }
   return true;
+}
+
+if (typeof window !== 'undefined') {
+  window.isSubscriptionActive = isSubscriptionActive;
+  window.showSubscriptionModal = openSubscriptionModal;
 }
 
 export function updateSubscriptionNavBadge() {

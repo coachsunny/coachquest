@@ -56,6 +56,11 @@
         <span class="badge-count" id="navSubStatusBadge" style="font-size:0.65rem; background:#7c3aed; color:#fff; border-radius:99px; padding:1px 6px; margin-left:3px; font-weight:700;">未啟用</span>
       </button>
 
+      <button class="nav-btn nav-btn-highlight" id="btnNavNlp" title="NLP 語言魔力回應術專屬訓練場 (授權專屬)" style="border: 1px solid #c084fc; background: #faf5ff;">
+        <span>🪄</span>
+        <span class="nav-text">NLP回應術</span>
+      </button>
+
       <button class="nav-btn" id="btnNavPokedex" title="百寶箱圖鑑儀表板">
         <span>🎒</span>
         <span class="nav-text">百寶箱</span>
@@ -90,6 +95,20 @@
           <div class="map-hero-badge">
             <div class="badge-val" id="mapHeroCaptured">0 / 16</div>
             <div class="badge-lbl">總收攏進度 (<span id="mapHeroRate">0%</span>)</div>
+          </div>
+        </div>
+
+        <!-- NLP 語言魔力回應術專屬訓練場橫幅 -->
+        <div class="nlp-promo-banner" id="bannerNlpPromo">
+          <div class="nlp-promo-content">
+            <div class="nlp-promo-tag">🪄 專屬特訓專區・Robert Dilts《語言的魔力》× 維度轉換</div>
+            <h3 class="nlp-promo-title">NLP 語言魔力回應術 · 三大實戰修煉關卡</h3>
+            <p class="nlp-promo-desc">透過「傾聽解構關（觀點/情緒/渴望）」、「破框回應關（14種換框術）」與「對話實戰關」，完成從困在表層「單一做法 (How)」到拉高維度「核心渴望 (Desire)」的維度轉換！</p>
+          </div>
+          <div class="nlp-promo-action">
+            <button class="btn btn-primary" id="btnOpenNlpFromBanner" style="background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); font-weight: 700; padding: 0.65rem 1.25rem;">
+              🪄 進入專屬修煉場 ➔
+            </button>
           </div>
         </div>
 
@@ -835,6 +854,342 @@
       </div>
     </div>
   </div>
+
+  <!-- ================= 彈窗: NLP 語言魔力回應術專屬訓練場 ================= -->
+  <div class="modal-overlay hidden" id="modalNlpArena">
+    <div class="modal-container modal-xl nlp-arena-modal">
+      
+      <!-- 頂部導航列 -->
+      <div class="nlp-modal-topbar">
+        <div class="nlp-topbar-brand">
+          <span class="nlp-magic-wand">🪄</span>
+          <div>
+            <div class="nlp-topbar-title">NLP 語言魔力回應術 · 專屬實戰訓練場</div>
+            <div class="nlp-topbar-sub">Robert Dilts 經典換框體系 × ICF 高階教練「維度轉換」心法</div>
+          </div>
+        </div>
+        <div class="nlp-topbar-actions">
+          <button class="btn btn-outline btn-sm" id="btnNlpViewPatterns">
+            📖 14模式圖鑑
+          </button>
+          <button class="btn-close" id="btnCloseNlpModal" title="關閉">✕</button>
+        </div>
+      </div>
+
+      <!-- 畫面 1: 主導航 Hub (選擇關卡) -->
+      <div class="nlp-screen" id="nlpScreenHub">
+        <div class="nlp-hub-header">
+          <h2>請選擇你想專注修煉的 NLP 技能關卡</h2>
+          <p>語言是思維的邊界。透過傾聽解構、破框回應與實戰對話，掌握 14 種換框神經語言魔法。</p>
+        </div>
+
+        <div class="nlp-modes-grid">
+          <!-- 第一關: 傾聽關 -->
+          <div class="nlp-mode-card" id="btnNlpStartListen">
+            <div class="mode-badge">Level 1 · 基礎奠定</div>
+            <div class="mode-icon">👂</div>
+            <h3 class="mode-title">第一關：傾聽解構關</h3>
+            <p class="mode-desc">關主連續出題（限制性信念與衝突對話）。學員試著精準剖析關主話語中的<b>「觀點」</b>、<b>「情緒」</b>與<b>「核心需要/渴望」</b>。關主與 AI 導師確認正確度與原因，並提供大師級維度轉換示範！</p>
+            <div class="mode-features">
+              <span>🎯 穿透表層刺人語言</span>
+              <span>🌊 敏銳同理深層脆弱</span>
+              <span>✨ 渴望與做法維度轉換</span>
+            </div>
+            <button class="btn btn-primary mode-action-btn">開始傾聽修煉 ➔</button>
+          </div>
+
+          <!-- 第二關: 回應關 -->
+          <div class="nlp-mode-card" id="btnNlpStartResponse">
+            <div class="mode-badge">Level 2 · 核心突破</div>
+            <div class="mode-icon">🪄</div>
+            <h3 class="mode-title">第二關：破框回應關</h3>
+            <p class="mode-desc">關主堅持其限制性信念，學員運用 <b>NLP 14 種換框回應術</b>（意圖、重新定義、反例、比喻等）回應關主。關主確認回應是否適當並評定心防鬆動度，AI 導師解析換框機理並給予大師示範！</p>
+            <div class="mode-features">
+              <span>🔄 14 種 Sleight of Mouth</span>
+              <span>⚡ 瞬間瓦解僵化前提</span>
+              <span>💡 開啟多元滿足管道</span>
+            </div>
+            <button class="btn btn-primary mode-action-btn" style="background: linear-gradient(135deg, #9333ea, #4f46e5);">開始破框修煉 ➔</button>
+          </div>
+
+          <!-- 第三關: 對話實戰關 -->
+          <div class="nlp-mode-card" id="btnNlpStartBattle">
+            <div class="mode-badge">Level 3 · 實戰演練</div>
+            <div class="mode-icon">⚔️</div>
+            <h3 class="mode-title">第三關：對話實戰關</h3>
+            <p class="mode-desc">自選 16 位道館關主與挑戰難度，在長達數回合的真實互動中綜合運用 NLP 換框錦囊化解頑固防禦，成功收攏關主！</p>
+            <div class="mode-features">
+              <span>👤 16 位多場景關主</span>
+              <span>🛡️ 戰術錦囊優先推薦 14 式</span>
+              <span>🔴 70分收攏入百寶箱</span>
+            </div>
+            <button class="btn btn-outline mode-action-btn">挑選關主對戰 ➔</button>
+          </div>
+        </div>
+
+        <div class="nlp-hub-footer">
+          <button class="btn btn-outline" id="btnNlpHubViewPatterns">
+            📖 查閱 NLP 14 種語言回應術完整心法手冊
+          </button>
+        </div>
+      </div>
+
+      <!-- 畫面 2: 第一關・傾聽解構關 -->
+      <div class="nlp-screen hidden" id="nlpScreenListen">
+        <div class="nlp-arena-flow-header">
+          <div class="flow-left">
+            <button class="btn btn-outline btn-sm" id="btnNlpListenBackHub">⬅ 返回模式選擇</button>
+            <span class="flow-title">👂 第一關：傾聽解構訓練</span>
+            <span class="flow-step-tag" id="nlpListenQuestionIndex">第 1 題</span>
+          </div>
+          <div class="flow-right">
+            <select id="nlpListenCategory" class="nlp-category-select">
+              <option value="all">🌐 全場景隨機</option>
+              <option value="work">💼 職場協作</option>
+              <option value="parenting">👨‍👩‍👧 親子教養</option>
+              <option value="couple">💍 伴侶親密</option>
+              <option value="personal">🌱 個人突破</option>
+            </select>
+            <button class="btn btn-success btn-sm" id="btnNlpListenFinish">
+              🏁 結算總結報告
+            </button>
+          </div>
+        </div>
+
+        <!-- 關主話語卡片 -->
+        <div class="nlp-question-card">
+          <div class="nlp-q-speaker-header">
+            <div class="speaker-avatar" id="nlpListenSpeakerAvatar">👨‍💻</div>
+            <div>
+              <div class="speaker-name" id="nlpListenSpeakerName">研發主管老周</div>
+              <div class="speaker-scene" id="nlpListenScenario">場景資訊載入中...</div>
+            </div>
+            <span class="category-badge" id="nlpListenCategoryBadge">職場協作</span>
+          </div>
+          <div class="nlp-q-statement" id="nlpListenStatement">『題目載入中……』</div>
+          <div class="nlp-q-hint">💡 請仔細傾聽上述話語，嘗試區分對方受困的<b>表層做法 (How)</b>、深層的<b>情緒</b>，與拉高維度後的<b>核心渴望 (Desire)</b>：</div>
+        </div>
+
+        <!-- 學員解構輸入區 -->
+        <div class="nlp-listen-inputs-grid">
+          <div class="nlp-input-block">
+            <label class="nlp-input-label">
+              <span>🧠 1. 觀點解析 (信念/前提假設)</span>
+              <small>對方持有什麼僵化信念？將什麼與什麼綁定？</small>
+            </label>
+            <textarea id="inputNlpBelief" class="nlp-textarea" rows="2" placeholder="例：認為只有考上這張證照才能證明自己；認為溝通只是在浪費時間..."></textarea>
+          </div>
+
+          <div class="nlp-input-block">
+            <label class="nlp-input-label">
+              <span>🌊 2. 情緒感受 (內在真實情緒)</span>
+              <small>話語背後隱藏著什麼未說出口的情緒？</small>
+            </label>
+            <textarea id="inputNlpEmotion" class="nlp-textarea" rows="2" placeholder="例：挫折、委屈、焦慮、害怕出醜、對失控的深深恐懼..."></textarea>
+          </div>
+
+          <div class="nlp-input-block">
+            <label class="nlp-input-label">
+              <span>✨ 3. 需要 / 核心渴望 (正面意圖)</span>
+              <small>拉高維度後，對方真正渴望與需要的是什麼？</small>
+            </label>
+            <textarea id="inputNlpNeed" class="nlp-textarea" rows="2" placeholder="例：渴望專業價值被認可、渴望成果品質的安心感、渴望在關係中感受到被牽掛..."></textarea>
+          </div>
+        </div>
+
+        <div class="nlp-action-bar">
+          <button class="btn btn-primary" id="btnNlpSubmitListen" style="min-width: 200px;">
+            🔍 提交傾聽分析・請關主確認
+          </button>
+        </div>
+
+        <!-- 傾聽關 AI 評審反饋卡片 -->
+        <div class="nlp-feedback-card hidden" id="nlpListenFeedbackCard">
+          <div class="feedback-header">
+            <span class="feedback-badge">🎯 傾聽評審結果</span>
+            <div class="feedback-score-box">
+              <span class="score-label">同理透視得分：</span>
+              <span class="score-val" id="nlpListenFeedbackScore">85分</span>
+            </div>
+          </div>
+
+          <div class="feedback-speaker-box" id="nlpListenFeedbackSpeaker"></div>
+          <div class="feedback-coach-box" id="nlpListenFeedbackCoach"></div>
+          
+          <!-- 維度轉換大師對照表 (Image 1 核心呈現) -->
+          <div id="nlpListenDimensionShiftBox"></div>
+
+          <div class="feedback-actions">
+            <button class="btn btn-primary" id="btnNlpListenNext">
+              👉 下一道練習題
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 畫面 3: 第二關・破框回應關 -->
+      <div class="nlp-screen hidden" id="nlpScreenResponse">
+        <div class="nlp-arena-flow-header">
+          <div class="flow-left">
+            <button class="btn btn-outline btn-sm" id="btnNlpRespBackHub">⬅ 返回模式選擇</button>
+            <span class="flow-title">🪄 第二關：破框回應訓練</span>
+            <span class="flow-step-tag" id="nlpRespQuestionIndex">第 1 題</span>
+          </div>
+          <div class="flow-right">
+            <select id="nlpRespCategory" class="nlp-category-select">
+              <option value="all">🌐 全場景隨機</option>
+              <option value="work">💼 職場協作</option>
+              <option value="parenting">👨‍👩‍👧 親子教養</option>
+              <option value="couple">💍 伴侶親密</option>
+              <option value="personal">🌱 個人突破</option>
+            </select>
+            <button class="btn btn-success btn-sm" id="btnNlpRespFinish">
+              🏁 結算總結報告
+            </button>
+          </div>
+        </div>
+
+        <!-- 關主信念卡片 -->
+        <div class="nlp-question-card">
+          <div class="nlp-q-speaker-header">
+            <div class="speaker-avatar" id="nlpRespSpeakerAvatar">👩‍💼</div>
+            <div>
+              <div class="speaker-name" id="nlpRespSpeakerName">資深專員美芳</div>
+              <div class="speaker-scene" id="nlpRespScenario">場景資訊載入中...</div>
+            </div>
+            <span class="category-badge" id="nlpRespCategoryBadge">個人突破</span>
+          </div>
+          <div class="nlp-q-statement" id="nlpRespStatement">『題目載入中……』</div>
+          <div class="nlp-q-hint">🪄 運用 NLP 語言回應術（Sleight of Mouth）進行換框回應，鬆動對方頑固的限制性信念：</div>
+        </div>
+
+        <!-- 14 模式快選按鈕列 -->
+        <div class="nlp-pattern-selector-box">
+          <div class="selector-title">可選：點擊指定嘗試運用的 NLP 模式（亦可不選，由 AI 自動識別）：</div>
+          <div class="nlp-pattern-tags-grid" id="nlpRespPatternTagsContainer"></div>
+        </div>
+
+        <!-- 學員破框回應輸入 -->
+        <div class="nlp-resp-input-box">
+          <label class="nlp-input-label">
+            <span>💬 你的教練破框回應話語：</span>
+            <small>肯定正面意圖、鬆動僵化做法、開啟全新維度</small>
+          </label>
+          <textarea id="inputNlpResponse" class="nlp-textarea" rows="3" placeholder="輸入你想對關主說的話……例如：「我非常理解你追求……的初衷。如果換個角度來看……」"></textarea>
+        </div>
+
+        <div class="nlp-action-bar">
+          <button class="btn btn-primary" id="btnNlpSubmitResponse" style="min-width: 200px; background: linear-gradient(135deg, #9333ea, #4f46e5);">
+            ⚡ 提交破框回應・檢視換框效果
+          </button>
+        </div>
+
+        <!-- 回應關 AI 評審反饋卡片 -->
+        <div class="nlp-feedback-card hidden" id="nlpRespFeedbackCard">
+          <div class="feedback-header">
+            <span class="feedback-badge" id="nlpRespIdentifiedPattern">🎯 識別運用模式：正面意圖</span>
+            <div class="feedback-score-box">
+              <span class="score-label">心防鬆動得分：</span>
+              <span class="score-val" id="nlpRespFeedbackScore">88分</span>
+            </div>
+          </div>
+
+          <div class="feedback-speaker-box" id="nlpRespFeedbackSpeaker"></div>
+          <div class="feedback-coach-box" id="nlpRespFeedbackCoach"></div>
+          <div id="nlpRespMasterDemosBox"></div>
+
+          <div class="feedback-actions">
+            <button class="btn btn-primary" id="btnNlpRespNext">
+              👉 下一道練習題
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 畫面 4: 修煉結算復盤報告 -->
+      <div class="nlp-screen hidden" id="nlpScreenReport">
+        <div class="nlp-report-container">
+          <div class="nlp-report-header">
+            <div class="report-badge">🏆 NLP 語言回應術 · 大師修煉復盤報告</div>
+            <h1 class="report-title" id="nlpReportTitle">🎖️ 破框換框大師先鋒</h1>
+            <div class="report-meta">
+              <span>學員教練：<b id="nlpReportStudentName">學員</b></span>
+              <span>綜合修煉評分：<b class="report-score-num" id="nlpReportScore">86分</b></span>
+            </div>
+          </div>
+
+          <!-- 導師總結評語 -->
+          <div class="report-section-card">
+            <h3>🧭 ICF 傳奇導師總結評語</h3>
+            <p class="report-critique-text" id="nlpReportCritique"></p>
+          </div>
+
+          <!-- 五維度能力條 -->
+          <div class="report-section-card">
+            <h3>📊 NLP 能力五維度分析</h3>
+            <div class="radar-bars-container" id="nlpReportRadarBars"></div>
+          </div>
+
+          <!-- 亮點與刻意練習指引 -->
+          <div class="report-two-cols">
+            <div class="report-col-card">
+              <h3>✨ 卓越亮點</h3>
+              <ul class="report-list strengths-list" id="nlpReportStrengthsList"></ul>
+            </div>
+            <div class="report-col-card">
+              <h3>🎯 課後刻意練習指引</h3>
+              <ul class="report-list growth-list" id="nlpReportRecommendationsList"></ul>
+            </div>
+          </div>
+
+          <!-- 逐題作答與大師解析對照 -->
+          <div class="report-section-card">
+            <h3>🔍 逐題演練與大師解析對照</h3>
+            <div class="exercises-review-list" id="nlpReportExercisesList"></div>
+          </div>
+
+          <!-- 底部操作按鈕 -->
+          <div class="nlp-report-actions">
+            <button class="btn btn-outline" id="btnNlpCopyReportMd">
+              📋 一鍵複製 Markdown 復盤筆記
+            </button>
+            <button class="btn btn-primary" id="btnNlpDownloadReportMd">
+              📥 下載 Markdown 報告檔
+            </button>
+            <button class="btn btn-outline" id="btnNlpReportRestart">
+              🔄 再次修煉本關卡
+            </button>
+            <button class="btn btn-outline" id="btnNlpReportBackHub">
+              🏠 返回模式選擇
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= 彈窗: 14 種 NLP 回應術模式速查圖鑑 ================= -->
+  <div class="modal-overlay hidden" id="modalNlpPatterns">
+    <div class="modal-container modal-lg">
+      <div class="modal-header">
+        <h3 class="modal-title">📖 NLP 14 種回應術心法速查手冊 (Sleight of Mouth)</h3>
+        <button class="btn-close" id="btnCloseNlpPatterns">✕</button>
+      </div>
+      <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+        <div style="font-size: 0.88rem; color: #4b5563; line-height: 1.6; margin-bottom: 1rem; background: #f8fafc; padding: 0.85rem; border-radius: 8px; border: 1px solid #e2e8f0;">
+          💡 <b>核心指南：</b>源自 Robert Dilts 經典神經語言學著作《語言的魔力》。當人們受困於限制性信念時，往往把「表層單一做法 (How)」與「核心渴望 (Desire)」混為一談。運用下列 14 種換框模式，能優雅地繞過理性防禦，打開無限全新可能！
+        </div>
+        <div class="nlp-patterns-grid" id="nlpPatternsGrid"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" data-close-modal>了解並返回</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入 NLP 模組 -->
+  <script src="js/nlp.js"></script>
 
   <!-- 引入主模組 -->
   <script type="module" src="js/app.js"></script>

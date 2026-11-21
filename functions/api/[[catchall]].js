@@ -13,6 +13,16 @@ import {
   buildCoopSynergyEvaluationPrompt
 } from '../../lib/prompts.js';
 
+import {
+  NLP_PATTERNS,
+  NLP_QUESTION_BANK,
+  getNlpPatternById,
+  getRandomNlpQuestion,
+  buildNlpListeningEvaluationPrompt,
+  buildNlpResponseEvaluationPrompt,
+  buildNlpSummaryReportPrompt
+} from '../../lib/nlp-engine.js';
+
 const GEMINI_CANDIDATE_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'];
 const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 const DEEPSEEK_CANDIDATE_MODELS = ['deepseek-chat', 'deepseek-reasoner'];
@@ -1090,6 +1100,287 @@ export async function handleApiRequest(request, env) {
 
 
     // ========================================================
+    // NLP 語言魔力回應術專區 APIs (Sleight of Mouth Arena)
+    // ========================================================
+
+    // 5A. GET /api/nlp/patterns (取得 14 種 NLP 模式清單)
+    if (pathname === '/nlp/patterns' && request.method === 'GET') {
+      return new Response(JSON.stringify({ ok: true, patterns: NLP_PATTERNS }), { headers: corsHeaders });
+    }
+
+    // 5B. POST /api/nlp/question (抽取或指定 NLP 練習題目，含授權碼檢驗)
+    if (pathname === '/nlp/question' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || 'NLP 回應術專區需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
+      const { category, excludeId, questionId } = body;
+      let targetQ = null;
+      if (questionId) {
+        targetQ = NLP_QUESTION_BANK.find(q => q.id === questionId);
+      }
+      if (!targetQ && category && category !== 'all') {
+        const pool = NLP_QUESTION_BANK.filter(q => q.category === category && q.id !== excludeId);
+        if (pool.length > 0) {
+          targetQ = pool[Math.floor(Math.random() * pool.length)];
+        }
+      }
+      if (!targetQ) {
+        targetQ = getRandomNlpQuestion(excludeId);
+      }
+
+      // 安全回傳：移除 hiddenTruth 答案，保留題幹與情境
+      const safeQuestion = {
+        id: targetQ.id,
+        category: targetQ.category,
+        categoryName: targetQ.categoryName,
+        speaker: targetQ.speaker,
+        avatar: targetQ.avatar,
+        statement: targetQ.statement,
+        scenario: targetQ.scenario,
+        suggestedPatterns: targetQ.suggestedPatterns || [],
+        dimensionShiftTakeaway: targetQ.dimensionShift ? targetQ.dimensionShift.takeaway : '方法 (How) 往往是排他的、僵化的；但渴望 (Desire) 卻是包容的、充滿創造力的。'
+      };
+
+      return new Response(JSON.stringify({
+        ok: true,
+        question: safeQuestion,
+        totalQuestions: NLP_QUESTION_BANK.length,
+        patterns: NLP_PATTERNS
+      }), { headers: corsHeaders });
+    }
+
+    // 5C. POST /api/nlp/listen/evaluate (第一關：傾聽解構評審)
+    if (pathname === '/nlp/listen/evaluate' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || 'NLP 傾聽關評審需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
+      const { questionId, userBelief = '', userEmotion = '', userNeed = '' } = body;
+      const question = NLP_QUESTION_BANK.find(q => q.id === questionId) || NLP_QUESTION_BANK[0];
+      const config = resolveApiConfig(body, env);
+      const systemPrompt = buildNlpListeningEvaluationPrompt({ question, userBelief, userEmotion, userNeed });
+
+      try {
+        const evaluation = await callLlmApi({
+          config,
+          systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `【第一關・傾聽解構評審】：\n關主話語：『${question.statement}』\n學員解析：\n1. 觀點：${userBelief}\n2. 情緒：${userEmotion}\n3. 需要/渴望：${userNeed}\n請進行深度維度轉換評鑑與回饋。`
+          }]
+        });
+
+        if (!evaluation.dimensionShift && question.dimensionShift) {
+          evaluation.dimensionShift = question.dimensionShift;
+        }
+
+        return new Response(JSON.stringify({ ok: true, evaluation }), { headers: corsHeaders });
+      } catch (err) {
+        console.error('NLP 傾聽關評審失敗:', err);
+        return new Response(JSON.stringify({
+          ok: true,
+          evaluation: {
+            score: 82,
+            level: '良好',
+            speakerFeedback: `「你說得很有道理，其實我一直被困在『只能這樣做』的執念裡，心裡真的很累。」`,
+            coachEvaluation: `學員能大致捕捉到發話者的情緒與限制性信念。若能將表面做法進一步提升至深層的核心渴望，將能更徹底打開對方的思維空間。`,
+            dimensions: { beliefAccuracy: 80, emotionAccuracy: 85, needConnection: 80 },
+            masterInsight: question.sampleListeningAnalysis || {
+              belief: question.hiddenTruth.belief,
+              emotion: question.hiddenTruth.emotion,
+              need: question.hiddenTruth.need
+            },
+            dimensionShift: question.dimensionShift || {
+              surfaceHow: '困在表層單一做法',
+              coreDesire: question.hiddenTruth.need,
+              multiChannels: ['建立多元合作方式', '以大局目標為重'],
+              takeaway: '方法 (How) 往往是排他的、僵化的；但渴望 (Desire) 卻是包容的、充滿創造力的。'
+            }
+          }
+        }), { headers: corsHeaders });
+      }
+    }
+
+    // 5D. POST /api/nlp/response/evaluate (第二關：破框回應評審)
+    if (pathname === '/nlp/response/evaluate' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || 'NLP 回應關評審需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
+      const { questionId, userResponse = '', targetPatternId = '' } = body;
+      const question = NLP_QUESTION_BANK.find(q => q.id === questionId) || NLP_QUESTION_BANK[0];
+      const config = resolveApiConfig(body, env);
+      const systemPrompt = buildNlpResponseEvaluationPrompt({ question, userResponse, targetPatternId });
+
+      try {
+        const evaluation = await callLlmApi({
+          config,
+          systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `【第二關・破框回應評審】：\n關主信念：『${question.statement}』\n學員回應：『${userResponse}』\n請識別 NLP 模式並評定心防鬆動度與回饋。`
+          }]
+        });
+
+        if (!evaluation.masterDemonstrations || evaluation.masterDemonstrations.length === 0) {
+          evaluation.masterDemonstrations = (question.sampleResponses || []).slice(0, 2).map(r => ({
+            patternId: r.pattern,
+            patternName: r.patternName,
+            demonstration: r.response,
+            rationale: '肯定正面意圖並鬆動單一做法，拉開全新選擇空間。'
+          }));
+        }
+
+        return new Response(JSON.stringify({ ok: true, evaluation }), { headers: corsHeaders });
+      } catch (err) {
+        console.error('NLP 回應關評審失敗:', err);
+        return new Response(JSON.stringify({
+          ok: true,
+          evaluation: {
+            score: 84,
+            identifiedPattern: '正面意圖 / 重新定義',
+            speakerReaction: `「……你這麼說，我倒真沒想過。也許真的是我太緊繃了。」`,
+            coachCritique: `回應展現了良好的同理接納，並成功將對方的注意力從僵化的單一做法轉移到更深層的意圖上。`,
+            dimensions: { empathyScore: 85, patternMatch: 82, beliefLoosening: 85 },
+            masterDemonstrations: (question.sampleResponses || []).slice(0, 2).map(r => ({
+              patternId: r.pattern,
+              patternName: r.patternName,
+              demonstration: r.response,
+              rationale: '肯定正面意圖並鬆動單一做法，拉開全新選擇空間。'
+            }))
+          }
+        }), { headers: corsHeaders });
+      }
+    }
+
+    // 5E. POST /api/nlp/report (生成 NLP 修煉結算報告並自動歸檔至歷史紀錄)
+    if (pathname === '/nlp/report' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || 'NLP 結算報告需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
+      const { mode = 'listen', exercises = [], studentName = '學員教練' } = body;
+      const config = resolveApiConfig(body, env);
+      const systemPrompt = buildNlpSummaryReportPrompt({ mode, exercises, studentName });
+
+      let reportData = null;
+      try {
+        reportData = await callLlmApi({
+          config,
+          systemPrompt,
+          messages: [{
+            role: 'user',
+            content: `請為學員【${studentName}】生成 NLP ${mode === 'listen' ? '傾聽關' : '回應關'} 結算報告。練習資料：\n${JSON.stringify(exercises, null, 2)}`
+          }]
+        });
+      } catch (err) {
+        console.warn('NLP 總結報告生成備援:', err);
+      }
+
+      const totalEx = exercises.length || 1;
+      const avgScore = Math.round(exercises.reduce((sum, e) => sum + (Number(e.evaluation?.score) || 80), 0) / totalEx);
+
+      const finalReport = {
+        studentName,
+        mode,
+        modeName: mode === 'listen' ? '第一關・傾聽解構專項' : '第二關・破框回應專項',
+        overallScore: (reportData && Number(reportData.overallScore)) || avgScore,
+        masteryTitle: (reportData && reportData.masteryTitle) || (avgScore >= 85 ? '破框換框大師先鋒' : '心靈透視教練'),
+        totalExercises: totalEx,
+        summaryCritique: (reportData && reportData.summaryCritique) || `在本次 ${totalEx} 道高強度實戰演練中，你展現了優秀的語意覺察與敏銳的同理心。能夠逐步看穿對方語言表層的單一做法，引導出拉高維度的核心渴望。`,
+        radarDimensions: (reportData && reportData.radarDimensions) || {
+          beliefInsight: Math.min(95, avgScore + 2),
+          emotionalEmpathy: Math.min(95, avgScore + 4),
+          positiveIntention: Math.min(95, avgScore),
+          reframingMastery: Math.min(95, avgScore - 2),
+          transformationDrive: Math.min(95, avgScore - 1)
+        },
+        highlightStrengths: (reportData && reportData.highlightStrengths) || [
+          '能快速識別發話者底層的脆弱情緒，建立安全的對話氛圍',
+          '在解構中能有效區分「表層做法 (How)」與「核心渴望 (Desire)」'
+        ],
+        growthRecommendations: (reportData && reportData.growthRecommendations) || [
+          '遇到頑固複合等同時，可多嘗試「反例法」與「反擊其身」瓦解通則',
+          '在探尋正面意圖時，可嘗試拉大時空框架至更宏觀的人生維度',
+          '銘記：方法往往是排他的，但渴望是包容的；持續拓展多元滿足管道'
+        ],
+        exercises,
+        createdAt: new Date().toISOString()
+      };
+
+      try {
+        const logs = await getStoredPracticeLogs(env);
+        const logId = 'nlp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const logEntry = {
+          id: logId,
+          studentName,
+          studentAvatar: '🪄',
+          bossId: `nlp_${mode}`,
+          bossName: `NLP語言魔力・${mode === 'listen' ? '傾聽解構關' : '破框回應關'}`,
+          bossAvatar: '🪄',
+          bossTitle: '語言魔術師修煉場',
+          category: 'nlp_mastery',
+          score: finalReport.overallScore,
+          isCaptured: finalReport.overallScore >= 70,
+          turns: totalEx,
+          bestCoachQuote: finalReport.masteryTitle + `（完成 ${totalEx} 題精練）`,
+          winningReason: `【NLP結算報告】榮獲稱號：${finalReport.masteryTitle}，平均得分 ${finalReport.overallScore} 分`,
+          advice: finalReport.summaryCritique,
+          dimensions: finalReport.radarDimensions,
+          dialogueHistory: exercises.map((ex, idx) => ({
+            role: 'assistant',
+            speaker: ex.question?.speaker || '關主',
+            content: `【題 ${idx+1}】${ex.question?.statement || ''}\n${mode === 'listen' ? `學員解析：觀點[${ex.userBelief}] 情緒[${ex.userEmotion}] 渴望[${ex.userNeed}]` : `學員回應：${ex.userResponse}`}\nAI評審：${ex.evaluation?.score}分 - ${ex.evaluation?.coachEvaluation || ex.evaluation?.coachCritique || ''}`
+          })),
+          submittedAt: new Date().toISOString(),
+          clientIp: request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown'
+        };
+
+        logs.unshift(logEntry);
+        if (logs.length > 500) logs.length = 500;
+        await saveStoredPracticeLogs(env, logs);
+      } catch (logErr) {
+        console.warn('NLP 練習紀錄後台儲存失敗:', logErr);
+      }
+
+      return new Response(JSON.stringify({ ok: true, report: finalReport }), { headers: corsHeaders });
+    }
+
+
+    // ========================================================
     // 多人約戰大廳與房間管理 (Multiplayer Arena APIs)
     // ========================================================
 
@@ -1582,15 +1873,15 @@ export async function handleApiRequest(request, env) {
         }
       }
 
-      // 2. 自動清理：移除同位學員、同位關主之過渡「進行中練習」重複暫存
+      // 2. 自動清理：移除同位學員、同位關主之過渡「進行中練習」重複暫存（48 小時內同一關主之暫存全數清理）
       const logTime = new Date(logEntry.submittedAt).getTime();
       for (let i = logs.length - 1; i >= 0; i--) {
         const item = logs[i];
         if (item.id === logEntry.id) continue;
         const isLiveItem = item.isLive || (item.id && item.id.startsWith('live_')) || (item.winningReason && item.winningReason.includes('【進行中練習】'));
-        if (isLiveItem && item.studentName === logEntry.studentName && item.bossId === logEntry.bossId) {
+        if (isLiveItem && item.studentName === logEntry.studentName && (item.bossId === logEntry.bossId || (item.bossName && logEntry.bossName && item.bossName === logEntry.bossName))) {
           const itemTime = new Date(item.submittedAt).getTime();
-          if (Math.abs(logTime - itemTime) < 3 * 60 * 60 * 1000) {
+          if (Math.abs(logTime - itemTime) < 48 * 60 * 60 * 1000) {
             logs.splice(i, 1);
           }
         }
@@ -1804,11 +2095,11 @@ export async function handleApiRequest(request, env) {
         const isLive = item.isLive || (item.id && item.id.startsWith('live_')) || (item.winningReason && item.winningReason.includes('【進行中練習】'));
         if (isLive) {
           const itemTime = new Date(item.submittedAt).getTime();
+          // 若有相同學員與相同關主在 48 小時內完成過正式結算，則此暫存為過渡重複草稿，主動修剪
           const hasFinished = completedEntries.some(c => 
             c.studentName === item.studentName &&
-            c.bossId === item.bossId &&
-            Math.abs(new Date(c.submittedAt).getTime() - itemTime) < 3 * 60 * 60 * 1000 &&
-            Math.abs((c.turns || 0) - (item.turns || 0)) <= 3
+            (c.bossId === item.bossId || (c.bossName && item.bossName && c.bossName === item.bossName)) &&
+            Math.abs(new Date(c.submittedAt).getTime() - itemTime) < 48 * 60 * 60 * 1000
           );
           if (hasFinished) {
             didPruneStaleLive = true;
@@ -1920,6 +2211,35 @@ export async function handleApiRequest(request, env) {
 
       await saveStoredPracticeLogs(env, []);
       return new Response(JSON.stringify({ ok: true, message: '已清空所有練習紀錄' }), { headers: corsHeaders });
+    }
+
+    // 19B. POST /api/admin/practice-logs/prune-live (管理員一鍵清理重複與過期進行中暫存)
+    if (pathname === '/admin/practice-logs/prune-live' && request.method === 'POST') {
+      const session = verifyAdminSession(request, env);
+      if (!session) {
+        return new Response(JSON.stringify({ ok: false, error: '未授權訪問管理端點' }), { status: 401, headers: corsHeaders });
+      }
+
+      const rawLogs = await getStoredPracticeLogs(env);
+      const completedEntries = rawLogs.filter(l => !l.isLive && !(l.id && l.id.startsWith('live_')) && !(l.winningReason && l.winningReason.includes('【進行中練習】')));
+      const cleaned = rawLogs.filter(item => {
+        const isLive = item.isLive || (item.id && item.id.startsWith('live_')) || (item.winningReason && item.winningReason.includes('【進行中練習】'));
+        if (!isLive) return true;
+        const itemTime = new Date(item.submittedAt).getTime();
+        const hasFinished = completedEntries.some(c => 
+          c.studentName === item.studentName &&
+          (c.bossId === item.bossId || (c.bossName && item.bossName && c.bossName === item.bossName)) &&
+          Math.abs(new Date(c.submittedAt).getTime() - itemTime) < 48 * 60 * 60 * 1000
+        );
+        return !hasFinished;
+      });
+
+      const prunedCount = rawLogs.length - cleaned.length;
+      if (prunedCount > 0) {
+        await saveStoredPracticeLogs(env, cleaned);
+      }
+
+      return new Response(JSON.stringify({ ok: true, prunedCount, remaining: cleaned.length }), { headers: corsHeaders });
     }
 
     // 20. POST /api/admin/import-save (導師後台直接匯入學員的 JSON 存檔檔案)

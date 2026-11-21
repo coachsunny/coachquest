@@ -99,7 +99,8 @@ const elements = {
 
   // 匯入學員存檔
   btnImportStudentSave: document.getElementById('btnImportStudentSave'),
-  inputAdminImportSave: document.getElementById('inputAdminImportSave')
+  inputAdminImportSave: document.getElementById('inputAdminImportSave'),
+  btnPruneLiveLogs: document.getElementById('btnPruneLiveLogs')
 };
 
 // 16 位關主速查字典
@@ -154,6 +155,7 @@ function bindEvents() {
   });
   elements.btnExportAllJson?.addEventListener('click', handleExportAllJson);
   elements.btnClearAllLogs?.addEventListener('click', handleClearAllLogs);
+  elements.btnPruneLiveLogs?.addEventListener('click', handlePruneLiveLogs);
 
   // 頂部頁籤切換
   elements.tabLogs?.addEventListener('click', () => {
@@ -644,6 +646,26 @@ async function handleClearAllLogs() {
     }
   } catch (err) {
     alert('清空失敗');
+  }
+}
+
+// 一鍵清理過期與已結算重複暫存
+async function handlePruneLiveLogs() {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (!token) return;
+
+  try {
+    const res = await fetch('/api/admin/practice-logs/prune-live', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`已成功清理 ${data.prunedCount} 筆重複與已結算暫存紀錄！目前保留 ${data.remaining} 筆有效紀錄。`);
+      await loadPracticeLogs();
+    }
+  } catch (err) {
+    alert('清理暫存失敗');
   }
 }
 
