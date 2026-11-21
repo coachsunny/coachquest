@@ -42,8 +42,53 @@ const adminSessions = new Map(); // token -> { username, createdAt, expiresAt }
 
 function getAdminCredentials(env) {
   const username = (env && env.ADMIN_USERNAME) ? String(env.ADMIN_USERNAME).trim() : 'admin';
-  const password = (env && env.ADMIN_PASSWORD) ? String(env.ADMIN_PASSWORD).trim() : 'coachquest2026';
+  const password = (env && (env.ADMIN_SECRET || env.ADMIN_PASSWORD)) ? String(env.ADMIN_SECRET || env.ADMIN_PASSWORD).trim() : 'coachquest2026';
   return { username, password };
+}
+
+// 防暴力猜測授權碼之 IP 速率限制池 (5 分鐘內連續失敗 5 次即鎖定 5 分鐘)
+const verifyRateLimits = new Map();
+
+function checkVerifyRateLimit(clientIp) {
+  if (!clientIp || clientIp === 'unknown') return { allowed: true };
+  const now = Date.now();
+  const record = verifyRateLimits.get(clientIp);
+  if (!record) return { allowed: true };
+
+  if (record.lockUntil && record.lockUntil > now) {
+    const remainingSeconds = Math.ceil((record.lockUntil - now) / 1000);
+    return { 
+      allowed: false, 
+      error: `授權碼驗證失敗次數過多，為保障系統安全，請於 ${remainingSeconds} 秒後再試。` 
+    };
+  }
+
+  if (now - record.firstAttemptAt > 5 * 60 * 1000) {
+    verifyRateLimits.delete(clientIp);
+    return { allowed: true };
+  }
+
+  return { allowed: true };
+}
+
+function recordVerifyFailure(clientIp) {
+  if (!clientIp || clientIp === 'unknown') return;
+  const now = Date.now();
+  let record = verifyRateLimits.get(clientIp);
+  if (!record || now - record.firstAttemptAt > 5 * 60 * 1000) {
+    record = { count: 1, firstAttemptAt: now, lockUntil: 0 };
+  } else {
+    record.count++;
+  }
+
+  if (record.count >= 5) {
+    record.lockUntil = now + 5 * 60 * 1000;
+  }
+  verifyRateLimits.set(clientIp, record);
+}
+
+function recordVerifySuccess(clientIp) {
+  if (clientIp) verifyRateLimits.delete(clientIp);
 }
 
 function verifyAdminSession(request, env) {
@@ -805,8 +850,7 @@ export async function handleApiRequest(request, env) {
         activeProvider: config.provider,
         providers: providers.length > 0 ? providers : ['gemini', 'deepseek'],
         defaultModel: config.model,
-        activeRoomsCount: activeRooms.size,
-        envKeys: env ? Object.keys(env) : []
+        activeRoomsCount: activeRooms.size
       }), { headers: corsHeaders });
     }
 
@@ -839,12 +883,25 @@ export async function handleApiRequest(request, env) {
       }), { headers: corsHeaders });
     }
 
-    // 2B. POST /api/subscription/verify (學員端檢驗訂閱授權碼有效性)
+    // 2B. POST /api/subscription/verify (學員端檢驗訂閱授權碼有效性，含防暴力猜測限速)
     if (pathname === '/subscription/verify' && request.method === 'POST') {
+      const clientIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for') || 'unknown';
+      const rateLimit = checkVerifyRateLimit(clientIp);
+      if (!rateLimit.allowed) {
+        return new Response(JSON.stringify({
+          ok: false,
+          valid: false,
+          error: rateLimit.error,
+          message: rateLimit.error,
+          contact: COACH_CONTACT_INFO
+        }), { status: 429, headers: corsHeaders });
+      }
+
       const body = await request.json().catch(() => ({}));
       const code = (body.code || request.headers.get('x-subscription-code') || '').trim();
       const subCheck = await verifySubscriptionCode(code, env, request);
       if (!subCheck.valid) {
+        recordVerifyFailure(clientIp);
         return new Response(JSON.stringify({
           ok: false,
           valid: false,
@@ -854,6 +911,8 @@ export async function handleApiRequest(request, env) {
           contact: COACH_CONTACT_INFO
         }), { status: 200, headers: corsHeaders });
       }
+
+      recordVerifySuccess(clientIp);
       return new Response(JSON.stringify({
         ok: true,
         valid: true,
@@ -1037,6 +1096,17 @@ export async function handleApiRequest(request, env) {
     // 6. POST /api/room/create (建立房間)
     if (pathname === '/room/create' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || '多人約戰需先啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
       const { mode = 'pvp_speedrun', bossId = 'boss_work_1', playerName = '房主教練', playerAvatar = '🧙‍♂️', userModel } = body;
 
       const boss = BOSS_DICTIONARY[bossId] || BOSS_DICTIONARY['boss_work_1'];
@@ -1291,6 +1361,17 @@ export async function handleApiRequest(request, env) {
     // 10. POST /api/room/evaluate (多人結算評審)
     if (pathname === '/room/evaluate' && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
+      const subCode = request.headers.get('x-subscription-code') || (body && body.subscriptionCode) || '';
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: subCheck.error || '多人結算需先啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
       const { roomId, userModel } = body;
 
       const room = activeRooms.get(roomId);
@@ -1593,6 +1674,17 @@ export async function handleApiRequest(request, env) {
 
     // 13B2. GET /api/practice-logs/student (學員依暱稱取得個人雲端歷史紀錄)
     if (pathname === '/practice-logs/student' && request.method === 'GET') {
+      const subCode = request.headers.get('x-subscription-code') || (url.searchParams.get('code') || '').trim();
+      const subCheck = await verifySubscriptionCode(subCode, env, request);
+      if (!subCheck.valid) {
+        return new Response(JSON.stringify({
+          ok: false,
+          error: 'SUBSCRIPTION_REQUIRED',
+          message: '查詢個人雲端歷史紀錄需啟用有效訂閱授權碼',
+          contact: COACH_CONTACT_INFO
+        }), { status: 403, headers: corsHeaders });
+      }
+
       const studentName = (url.searchParams.get('name') || '').trim();
       if (!studentName) {
         return new Response(JSON.stringify({ ok: true, logs: [] }), { headers: corsHeaders });

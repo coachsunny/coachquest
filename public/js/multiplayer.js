@@ -2,6 +2,15 @@
 // CoachQuest - 多人約戰連線管理器 (Multiplayer Manager)
 // ========================================================
 
+function getStoredSubCode() {
+  try {
+    const raw = localStorage.getItem('coachquest_subscription_v1');
+    return raw ? JSON.parse(raw).code || '' : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 export const MultiplayerManager = {
   currentRoom: null,
   myPlayerId: null,
@@ -11,14 +20,18 @@ export const MultiplayerManager = {
   // 1. 建立房間
   async createRoom({ mode, bossId, playerName, playerAvatar, userApiKey, userModel }) {
     try {
+      const subCode = getStoredSubCode();
       const res = await fetch('/api/room/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode, bossId, playerName, playerAvatar, userApiKey, userModel })
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-subscription-code': subCode
+        },
+        body: JSON.stringify({ mode, bossId, playerName, playerAvatar, userApiKey, userModel, subscriptionCode: subCode })
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || '無法建立房間');
+        throw new Error(data.message || data.error || '無法建立房間');
       }
       this.currentRoom = data.room;
       this.myPlayerId = data.playerId;
@@ -98,13 +111,18 @@ export const MultiplayerManager = {
   async evaluateRoom(userApiKey, userModel) {
     if (!this.currentRoom) return null;
     try {
+      const subCode = getStoredSubCode();
       const res = await fetch('/api/room/evaluate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-subscription-code': subCode
+        },
         body: JSON.stringify({
           roomId: this.currentRoom.roomId,
           userApiKey,
-          userModel
+          userModel,
+          subscriptionCode: subCode
         })
       });
       const data = await res.json();

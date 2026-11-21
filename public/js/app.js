@@ -2457,8 +2457,17 @@ async function handleSyncCloudLogs() {
   }
 
   try {
-    const res = await fetch(`/api/practice-logs/student?name=${encodeURIComponent(nickname)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const subCode = getSubscriptionCode();
+    const res = await fetch(`/api/practice-logs/student?name=${encodeURIComponent(nickname)}`, {
+      headers: { 'x-subscription-code': subCode }
+    });
+    if (!res.ok) {
+      if (res.status === 403) {
+        openSubscriptionModal('查詢個人雲端歷史紀錄需先啟用有效訂閱授權碼！');
+        return;
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
     const data = await res.json();
     if (data.ok && Array.isArray(data.logs)) {
       InventoryManager.mergeCloudPracticeLogs(data.logs);
